@@ -954,6 +954,14 @@
             }
         }
 
+        function checkScripts() {
+            console.log('🔍 ПРОВЕРКА ЗАГРУЗКИ СКРИПТОВ:');
+            console.log('- app-state.js:', typeof AppState !== 'undefined' ? '✅ Загружен' : '❌ Не загружен');
+            console.log('- appState instance:', typeof appState !== 'undefined' ? '✅ Создан' : '❌ Не создан');
+            console.log('- ScannerManager:', typeof ScannerManager !== 'undefined' ? '✅ Загружен' : '❌ Не загружен');
+            console.log('- scannerManager:', typeof scannerManager !== 'undefined' ? '✅ Создан' : '❌ Не создан');
+        }
+
         function showScannerHelp() {
             addToConsole('<strong>📋 Команды сканера:</strong>');
             addToConsole('• <strong>debug</strong> - информация о системе');
