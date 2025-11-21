@@ -1,0 +1,21 @@
+{
+    "name": "QR Сканер Склада",
+    "short_name": "QR Сканер",
+    "description": "Сканирование QR-кодов для склада",
+    "start_url": "/qr-scanner/",
+    "display": "fullscreen",
+    "theme_color": "#007bff",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "ico/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "ico/icon-512.png",
+            "sizes": "512x512", 
+            "type": "image/png"
+        }
+    ]
+}
