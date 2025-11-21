@@ -1,19 +1,30 @@
 class ScannerManager {
     constructor() {
 
+    // Ждем загрузки AppState
         if (typeof AppState === 'undefined') {
-            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: AppState не загружен!');
-            showError('Ошибка инициализации: AppState не найден');
+            console.error('❌ AppState не загружен! Откладываем инициализацию...');
+            setTimeout(() => {
+                if (typeof AppState !== 'undefined') {
+                    this.initialize();
+                } else {
+                    console.error('❌ AppState все еще не загружен после таймаута');
+                }
+            }, 1000);
             return;
         }
+        
+        this.initialize();
+    }
+
+    initialize() {
+        console.log('🚀 Инициализация ScannerManager с загруженным AppState');
         
         if (typeof appState === 'undefined') {
             console.log('🔄 Создаем новый экземпляр AppState...');
             window.appState = new AppState();
         }
-        
-        console.log('✅ AppState статус:', window.appState ? '✅ Загружен' : '❌ Не загружен');
-        
+
         this.scanner = null;
         this.isScanning = false;
         this.selectedContractors = [];
@@ -800,19 +811,19 @@ class ScannerManager {
             
             // УЛУЧШЕННАЯ КОНФИГУРАЦИЯ ДЛЯ ЛУЧШЕГО СКАНИРОВАНИЯ
             const config = {
-                fps: 15, // Увеличили FPS для плавности
-                qrbox: { width: 300, height: 300 }, // Увеличили область сканирования
+                fps: 10, // Уменьшите для стабильности
+                qrbox: { width: 250, height: 250 }, // Уменьшите область сканирования
                 aspectRatio: 1.0,
                 supportedScanTypes: [
                     Html5QrcodeScanType.SCAN_TYPE_QR_CODE,
-                    Html5QrcodeScanType.SCAN_TYPE_DATAMATRIX // Добавили поддержку DataMatrix
+                    Html5QrcodeScanType.SCAN_TYPE_DATAMATRIX
                 ],
-                // УЛУЧШЕННЫЕ НАСТРОЙКИ ВИДЕО
+                // Упрощенные настройки видео
                 videoConstraints: {
-                    width: { ideal: 1920, min: 1280 }, // Высокое разрешение для четкости
-                    height: { ideal: 1080, min: 720 },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
                     facingMode: "environment",
-                    frameRate: { ideal: 30, min: 15 } // Плавный фреймрейт
+                    frameRate: { ideal: 20 }
                 }
             };
     
