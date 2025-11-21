@@ -106,32 +106,25 @@ class ScannerManager {
     // УПРАВЛЕНИЕ КОНТРАГЕНТАМИ
     showAddContractorForm() {
         console.log('➕ Показываем форму добавления контрагента');
-        
-        // Сначала показываем модальное окно
         this.showContractorManager();
         
-        // Затем показываем форму добавления
         setTimeout(() => {
             const addForm = document.getElementById('addContractorForm');
             const importForm = document.getElementById('importForm');
             
             if (addForm) {
                 addForm.classList.remove('hidden');
-                // Очищаем поля
                 document.getElementById('contractorName').value = '';
                 document.getElementById('contractorCategory').value = '';
-                // Фокусируемся на поле ввода
                 document.getElementById('contractorName').focus();
             }
             if (importForm) importForm.classList.add('hidden');
-            
         }, 100);
     }
 
     // Показываем форму импорта
     showImportForm() {
         console.log('📥 Показываем форму импорта');
-        
         this.showContractorManager();
         
         setTimeout(() => {
@@ -160,11 +153,9 @@ class ScannerManager {
 
     // прячем
     hideContractorManager() {
-        console.log('👥 Скрываем менеджер контрагентов');
         const modal = document.getElementById('contractorManager');
         if (modal) {
             modal.classList.add('hidden');
-            // Восстанавливаем прокрутку
             document.body.style.overflow = '';
         }
     }
@@ -473,19 +464,13 @@ class ScannerManager {
 
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     hideAddContractorForm() {
-        console.log('❌ Скрываем форму добавления контрагента');
         const addForm = document.getElementById('addContractorForm');
-        if (addForm) {
-            addForm.classList.add('hidden');
-        }
+        if (addForm) addForm.classList.add('hidden');
     }
 
     hideImportForm() {
-        console.log('❌ Скрываем форму импорта');
         const importForm = document.getElementById('importForm');
-        if (importForm) {
-            importForm.classList.add('hidden');
-        }
+        if (importForm) importForm.classList.add('hidden');
     }
 
     selectContractorInManager(contractorId) {
@@ -2149,38 +2134,46 @@ class ScannerManager {
     // ОБНОВЛЕНИЕ ВЫБРАННЫХ КОНТРАГЕНТОВ В ИНТЕРФЕЙСЕ
     updateSelectedContractorsUI() {
         const container = document.getElementById('selectedContractors');
-        if (!container) return;
+        const contractorsList = document.getElementById('contractorsList');
+        const selectedCount = document.getElementById('selectedCount');
+        
+        if (!container || !contractorsList) {
+            console.error('❌ Элементы интерфейса контрагентов не найдены');
+            return;
+        }
         
         if (this.selectedContractors.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">👥</span>
-                    <p>Контрагенты не выбраны</p>
-                    <small>Выберите контрагентов из списка выше</small>
-                </div>
-            `;
-        } else {
-            container.innerHTML = this.selectedContractors.map(contractor => `
-                <div class="selected-contractor-item">
-                    <div class="contractor-badge">
-                        <span class="contractor-name">${contractor.name}</span>
-                        <span class="contractor-category">${contractor.category}</span>
-                        <button class="btn-remove" onclick="scannerManager.removeContractor(${contractor.id})">
-                            ✕
-                        </button>
-                    </div>
-                </div>
-            `).join('');
+            container.classList.add('hidden');
+            if (selectedCount) selectedCount.textContent = '0';
+            return;
         }
+        
+        container.classList.remove('hidden');
+        if (selectedCount) selectedCount.textContent = this.selectedContractors.length;
+        
+        // Используем существующие классы из CSS
+        contractorsList.innerHTML = this.selectedContractors.map(contractor => 
+            `<div class="contractor-tag">
+                <span class="contractor-name">${contractor.name}</span>
+                <span class="contractor-category">${contractor.category}</span>
+                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeContractor(${contractor.id})">
+                    ✕
+                </button>
+            </div>`
+        ).join('');
     }
 
-    // ПОКАЗ СИМУЛЯТОРА (заглушка - нужно реализовать)
+    // ПОКАЗ СИМУЛЯТОРА
     showSimulator() {
         console.log('🧪 Показываем симулятор сканирования');
-        showInfo('Режим симулятора активирован. Используйте для тестирования без камеры.', 3000);
+        const simulator = document.getElementById('simulator');
+        if (simulator) {
+            simulator.classList.remove('hidden');
+        }
+        showInfo('Режим симулятора активирован', 3000);
     }
 
-    // СИМУЛЯЦИЯ СКАНИРОВАНИЯ (заглушка - нужно реализовать)
+    // СИМУЛЯЦИЯ СКАНИРОВАНИЯ
     simulateScan(code) {
         console.log('🧪 Симуляция сканирования кода:', code);
         this.onScanSuccess(code);
