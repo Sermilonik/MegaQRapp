@@ -1028,6 +1028,12 @@ h1 {
     background-color: #f8f9fa;
 }
 
+.dropdown-item.no-results {
+    cursor: default;
+    color: #6c757d;
+    text-align: center;
+}
+
 .search-container {
     display: flex;
     gap: 8px;
@@ -1061,7 +1067,11 @@ h1 {
 
 /* Выбранные контрагенты */
 .selected-contractors {
-    display: none;
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
 }
 
 .selected-header {
@@ -1069,14 +1079,59 @@ h1 {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 10px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.selected-contractor-item {
+    margin-bottom: 8px;
 }
 
 .contractors-list {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+}
+
+.contractor-badge {
+    display: inline-flex;
+    align-items: center;
+    background: white;
+    border: 1px solid #007bff;
+    border-radius: 20px;
+    padding: 6px 12px;
+    margin-right: 8px;
+    margin-bottom: 5px;
+}
+
+.contractor-badge .contractor-name {
+    font-weight: 500;
+    margin-right: 8px;
+}
+
+.contractor-badge .contractor-category {
+    font-size: 11px;
+    color: #6c757d;
+    margin-right: 8px;
+}
+
+.btn-remove {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.btn-remove:hover {
+    background: #c82333;
 }
 
 .contractor-tag {
@@ -1375,6 +1430,12 @@ h1 {
     .contractor-category {
         margin-right: 0;
         margin-top: 5px;
+    }
+
+    .selected-header {
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
     }
     
     .selected-badge {
