@@ -1,5 +1,19 @@
 class ScannerManager {
     constructor() {
+
+        if (typeof AppState === 'undefined') {
+            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: AppState не загружен!');
+            showError('Ошибка инициализации: AppState не найден');
+            return;
+        }
+        
+        if (typeof appState === 'undefined') {
+            console.log('🔄 Создаем новый экземпляр AppState...');
+            window.appState = new AppState();
+        }
+        
+        console.log('✅ AppState статус:', window.appState ? '✅ Загружен' : '❌ Не загружен');
+        
         this.scanner = null;
         this.isScanning = false;
         this.selectedContractors = [];
@@ -157,13 +171,23 @@ class ScannerManager {
     
     // lдобавление контрагентов
     addContractor() {
-        console.log('✅ Пытаемся добавить нового контрагента...');
+        console.log('🎯 НАЧАЛО: Добавление нового контрагента');
         
+        // ЗАЩИТА ОТ ОШИБОК appState
+        if (typeof appState === 'undefined') {
+            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: appState не определен');
+            showError('Ошибка системы. Перезагрузите приложение.');
+            return;
+        }
+    
         const nameInput = document.getElementById('contractorName');
         const categoryInput = document.getElementById('contractorCategory');
         
+        console.log('- Поле имени:', nameInput);
+        console.log('- Поле категории:', categoryInput);
+        
         if (!nameInput || !categoryInput) {
-            console.error('❌ Поля ввода не найдены');
+            console.error('❌ Поля ввода не найдены в DOM');
             showError('Ошибка: поля ввода не найдены');
             return;
         }
@@ -172,6 +196,7 @@ class ScannerManager {
         const category = categoryInput.value.trim() || 'Общая категория';
         
         console.log('- Введенные данные:', { name, category });
+        console.log('- Текущие контрагенты до добавления:', this.allContractors.length);
         
         if (!name) {
             showError('❌ Введите название контрагента');
@@ -209,9 +234,11 @@ class ScannerManager {
             console.log('- Контрагентов после добавления:', this.allContractors.length);
             
             // Сохраняем в хранилище
+            console.log('💾 Сохраняем контрагентов...');
             this.saveContractors();
             
             // Обновляем интерфейс
+            console.log('🔄 Обновляем интерфейс...');
             this.hideAddContractorForm();
             this.loadContractorsManagerList();
             
@@ -220,11 +247,11 @@ class ScannerManager {
             categoryInput.value = '';
             
             showSuccess(`✅ Контрагент "${name}" успешно добавлен!`, 3000);
-            console.log('✅ Контрагент успешно добавлен и сохранен');
+            console.log('🎉 КОНТРАГЕНТ УСПЕШНО ДОБАВЛЕН И СОХРАНЕН');
             
         } catch (error) {
-            console.error('❌ Критическая ошибка при добавлении контрагента:', error);
-            showError('Ошибка при добавлении контрагента');
+            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении контрагента:', error);
+            showError('Ошибка при добавлении контрагента: ' + error.message);
         }
     }
 
