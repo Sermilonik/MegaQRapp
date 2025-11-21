@@ -343,8 +343,8 @@
                     <div class="form-group">
                         <label>CSV данные (Название,Категория):</label>
                         <textarea id="importData" class="form-select" rows="6" placeholder="ООО Ромашка,Оптовый покупатель
-ИП Иванов,Розничная сеть
-ООО Луч,Дилер"></textarea>
+    ИП Иванов,Розничная сеть
+    ООО Луч,Дилер"></textarea>
                     </div>
                     <div class="form-help">
                         <small>Формат: каждая строка - отдельный контрагент, поля разделены запятыми</small>
@@ -360,7 +360,7 @@
                     <h4>Список контрагентов</h4>
                     <div class="search-box">
                         <input type="text" id="managerSearch" placeholder="🔍 Поиск контрагентов..." class="form-select" 
-                               oninput="scannerManager.filterContractorsList()">
+                            oninput="scannerManager.filterContractorsList()">
                     </div>
                     <div id="contractorsManagerList" class="contractors-manager-list">
                         <!-- Список будет здесь -->
@@ -991,6 +991,21 @@
                 const btn = document.getElementById(id);
                 console.log(`• ${id}:`, btn ? '✅ Найдена' : '❌ Не найдена');
             });
+        }
+
+        function checkContractorsDOM() {
+            console.log('🔍 ПРОВЕРКА DOM ДЛЯ КОНТРАГЕНТОВ:');
+            console.log('- contractorManager:', document.getElementById('contractorManager'));
+            console.log('- contractorsManagerList:', document.getElementById('contractorsManagerList'));
+            console.log('- addContractorForm:', document.getElementById('addContractorForm'));
+            console.log('- contractorName:', document.getElementById('contractorName'));
+            console.log('- contractorCategory:', document.getElementById('contractorCategory'));
+            
+            const manager = document.getElementById('contractorManager');
+            if (manager) {
+                console.log('- contractorManager классы:', manager.className);
+                console.log('- contractorManager display:', window.getComputedStyle(manager).display);
+            }
         }
 
         function clearMobileConsole() {
