@@ -93,25 +93,24 @@ class ScannerManager {
     showAddContractorForm() {
         console.log('➕ Показываем форму добавления контрагента');
         
-        // Показываем модальное окно управления контрагентами
+        // Сначала показываем модальное окно
         this.showContractorManager();
         
-        // Показываем именно форму добавления
+        // Затем показываем форму добавления
         setTimeout(() => {
             const addForm = document.getElementById('addContractorForm');
             const importForm = document.getElementById('importForm');
             
-            if (addForm) addForm.classList.remove('hidden');
+            if (addForm) {
+                addForm.classList.remove('hidden');
+                // Очищаем поля
+                document.getElementById('contractorName').value = '';
+                document.getElementById('contractorCategory').value = '';
+                // Фокусируемся на поле ввода
+                document.getElementById('contractorName').focus();
+            }
             if (importForm) importForm.classList.add('hidden');
             
-            // Фокусируемся на поле ввода
-            const nameInput = document.getElementById('contractorName');
-            if (nameInput) {
-                nameInput.focus();
-                // Очищаем поля
-                nameInput.value = '';
-                document.getElementById('contractorCategory').value = '';
-            }
         }, 100);
     }
 
@@ -119,22 +118,16 @@ class ScannerManager {
     showImportForm() {
         console.log('📥 Показываем форму импорта');
         
-        // Показываем модальное окно
         this.showContractorManager();
         
-        // Показываем именно форму импорта
         setTimeout(() => {
             const addForm = document.getElementById('addContractorForm');
             const importForm = document.getElementById('importForm');
             
             if (addForm) addForm.classList.add('hidden');
-            if (importForm) importForm.classList.remove('hidden');
-            
-            // Фокусируемся на поле импорта
-            const importData = document.getElementById('importData');
-            if (importData) {
-                importData.focus();
-                importData.value = '';
+            if (importForm) {
+                importForm.classList.remove('hidden');
+                document.getElementById('importData').focus();
             }
         }, 100);
     }
@@ -146,7 +139,6 @@ class ScannerManager {
         if (modal) {
             modal.classList.remove('hidden');
             this.loadContractorsManagerList();
-            
             // Блокируем прокрутку фона
             document.body.style.overflow = 'hidden';
         }
@@ -158,7 +150,6 @@ class ScannerManager {
         const modal = document.getElementById('contractorManager');
         if (modal) {
             modal.classList.add('hidden');
-            
             // Восстанавливаем прокрутку
             document.body.style.overflow = '';
         }
@@ -202,67 +193,75 @@ class ScannerManager {
     }
     
     // импорт контрагентов
-    importContractors() {
-        console.log('📥 Импортируем контрагентов');
+    addContractor() {
+        console.log('✅ Пытаемся добавить нового контрагента...');
         
-        const importData = document.getElementById('importData');
-        const data = importData?.value.trim();
+        const nameInput = document.getElementById('contractorName');
+        const categoryInput = document.getElementById('contractorCategory');
         
-        if (!data) {
-            showError('❌ Введите данные для импорта');
+        if (!nameInput || !categoryInput) {
+            console.error('❌ Поля ввода не найдены');
+            showError('Ошибка: поля ввода не найдены');
+            return;
+        }
+        
+        const name = nameInput.value.trim();
+        const category = categoryInput.value.trim() || 'Общая категория';
+        
+        console.log('- Введенные данные:', { name, category });
+        
+        if (!name) {
+            showError('❌ Введите название контрагента');
+            nameInput.focus();
+            return;
+        }
+        
+        // Проверяем дубликаты
+        const exists = this.allContractors.some(c => 
+            c.name.toLowerCase() === name.toLowerCase()
+        );
+        
+        if (exists) {
+            showError('❌ Контрагент с таким названием уже существует');
+            nameInput.focus();
             return;
         }
         
         try {
-            const lines = data.split('\n').filter(line => line.trim());
-            let importedCount = 0;
-            let errorCount = 0;
-            
-            lines.forEach((line, index) => {
-                const parts = line.split(',').map(part => part.trim());
+            // Создаем нового контрагента
+            const newId = this.allContractors.length > 0 
+                ? Math.max(...this.allContractors.map(c => c.id)) + 1 
+                : 1;
                 
-                if (parts.length >= 1 && parts[0]) {
-                    const name = parts[0];
-                    const category = parts[1] || 'Импортированные';
-                    
-                    // Проверяем дубликаты
-                    const exists = this.allContractors.some(c => 
-                        c.name.toLowerCase() === name.toLowerCase()
-                    );
-                    
-                    if (!exists) {
-                        const newId = Math.max(...this.allContractors.map(c => c.id), 0) + 1;
-                        this.allContractors.push({
-                            id: newId,
-                            name: name,
-                            category: category
-                        });
-                        importedCount++;
-                    } else {
-                        errorCount++;
-                        console.log(`⚠️ Дубликат: ${name}`);
-                    }
-                } else {
-                    errorCount++;
-                }
-            });
+            const newContractor = {
+                id: newId,
+                name: name,
+                category: category
+            };
             
-            if (importedCount > 0) {
-                this.saveContractors();
-                this.loadContractorsManagerList();
-            }
+            console.log('- Создаем контрагента:', newContractor);
             
-            let message = `✅ Импортировано: ${importedCount} контрагентов`;
-            if (errorCount > 0) {
-                message += `, пропущено: ${errorCount}`;
-            }
+            // Добавляем в массив
+            this.allContractors.push(newContractor);
+            console.log('- Контрагентов после добавления:', this.allContractors.length);
             
-            showSuccess(message, 5000);
-            this.hideImportForm();
+            // Сохраняем в хранилище
+            this.saveContractors();
+            
+            // Обновляем интерфейс
+            this.hideAddContractorForm();
+            this.loadContractorsManagerList();
+            
+            // Очищаем поля
+            nameInput.value = '';
+            categoryInput.value = '';
+            
+            showSuccess(`✅ Контрагент "${name}" успешно добавлен!`, 3000);
+            console.log('✅ Контрагент успешно добавлен и сохранен');
             
         } catch (error) {
-            console.error('❌ Ошибка импорта:', error);
-            showError('Ошибка при импорте данных');
+            console.error('❌ Критическая ошибка при добавлении контрагента:', error);
+            showError('Ошибка при добавлении контрагента');
         }
     }
 
@@ -335,13 +334,19 @@ class ScannerManager {
 
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     hideAddContractorForm() {
-        const form = document.getElementById('addContractorForm');
-        if (form) form.classList.add('hidden');
+        console.log('❌ Скрываем форму добавления контрагента');
+        const addForm = document.getElementById('addContractorForm');
+        if (addForm) {
+            addForm.classList.add('hidden');
+        }
     }
 
     hideImportForm() {
-        const form = document.getElementById('importForm');
-        if (form) form.classList.add('hidden');
+        console.log('❌ Скрываем форму импорта');
+        const importForm = document.getElementById('importForm');
+        if (importForm) {
+            importForm.classList.add('hidden');
+        }
     }
 
     selectContractorInManager(contractorId) {
@@ -1563,36 +1568,51 @@ class ScannerManager {
 
     // СОХРАНЕНИЕ КОНТРАГЕНТОВ В ХРАНИЛИЩЕ
     saveContractors() {
-        console.log('💾 Сохранение контрагентов в localStorage...');
-        console.log('- Количество контрагентов для сохранения:', this.allContractors.length);
+        console.log('💾 СОХРАНЕНИЕ КОНТРАГЕНТОВ В ХРАНИЛИЩЕ');
         
         try {
-            // ПРЕОБРАЗУЕМ В ЧИСТЫЙ МАССИВ БЕЗ МЕТОДОВ
-            const contractorsToSave = this.allContractors.map(contractor => ({
-                id: contractor.id,
-                name: contractor.name,
-                category: contractor.category
-            }));
+            // Проверяем что есть что сохранять
+            if (!this.allContractors || this.allContractors.length === 0) {
+                console.warn('⚠️ Нет контрагентов для сохранения');
+                return;
+            }
             
-            localStorage.setItem('honest_sign_contractors', JSON.stringify(contractorsToSave));
+            console.log('- Сохраняем контрагентов:', this.allContractors.length);
+            console.log('- Данные для сохранения:', this.allContractors);
             
-            // Проверяем сохранение
+            // Преобразуем в чистый JSON
+            const contractorsToSave = JSON.stringify(this.allContractors);
+            console.log('- JSON для сохранения:', contractorsToSave);
+            
+            // Сохраняем в localStorage
+            localStorage.setItem('honest_sign_contractors', contractorsToSave);
+            
+            // ПРОВЕРЯЕМ СОХРАНЕНИЕ
             const saved = localStorage.getItem('honest_sign_contractors');
-            const parsed = JSON.parse(saved);
-            console.log('- Проверка сохранения:', parsed.length === contractorsToSave.length ? '✅ Успешно' : '❌ Ошибка');
-            console.log('- Сохранено контрагентов:', parsed.length);
+            console.log('- Проверка сохранения:', saved ? '✅ Успешно' : '❌ Ошибка');
+            
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                console.log('- Проверка данных:', parsed.length === this.allContractors.length ? '✅ Данные совпадают' : '❌ Данные не совпадают');
+                console.log('- Сохранено контрагентов:', parsed.length);
+            } else {
+                console.error('❌ Данные не сохранились в localStorage');
+            }
             
         } catch (error) {
-            console.error('❌ Ошибка сохранения контрагентов:', error);
-            // Пробуем сохранить хотя бы стандартных
+            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ:', error);
+            
+            // Пробуем сохранить хотя бы основные данные
             try {
-                const defaultContractors = [
-                    { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель' },
-                    { id: 2, name: 'ИП Иванов', category: 'Розничная сеть' }
-                ];
-                localStorage.setItem('honest_sign_contractors', JSON.stringify(defaultContractors));
+                const basicContractors = this.allContractors.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    category: c.category
+                }));
+                localStorage.setItem('honest_sign_contractors', JSON.stringify(basicContractors));
+                console.log('🔄 Сохранены базовые данные');
             } catch (e) {
-                console.error('❌ Критическая ошибка сохранения:', e);
+                console.error('❌ Не удалось сохранить даже базовые данные:', e);
             }
         }
     }
