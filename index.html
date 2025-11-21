@@ -398,12 +398,11 @@
     </div>
 
     <!-- ПОДКЛЮЧАЕМ СКРИПТЫ -->
-    <script src="js/scanner.js"></script>
     <script src="js/app-state.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/notifications.js"></script>
     <script src="js/pdf-generator.js"></script>
-
+    <script src="js/scanner.js"></script>
 
     <script>
         // ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОБРАБОТКИ СОБЫТИЙ
@@ -573,38 +572,30 @@
         let scannerManagerInitialized = false;
 
         function initializeScannerManager() {
-            if (scannerManagerInitialized) return;
+            if (scannerManagerInitialized) {
+                console.log('⚠️ ScannerManager уже инициализирован');
+                return;
+            }
             
-            console.log('🚀 Инициализация ScannerManager...');
+            if (typeof AppState === 'undefined' || typeof ScannerManager === 'undefined') {
+                console.log('⏳ Ожидаем загрузку зависимостей...');
+                setTimeout(initializeScannerManager, 500);
+                return;
+            }
             
             try {
-                if (typeof ScannerManager !== 'undefined') {
-                    window.scannerManager = new ScannerManager();
-                    scannerManagerInitialized = true;
-                    console.log('✅ ScannerManager инициализирован');
-                    
-                    // Загружаем отчеты после инициализации
-                    setTimeout(() => {
-                        if (scannerManager.loadReportsList) {
-                            scannerManager.loadReportsList();
-                        }
-                    }, 1000);
-                    
-                } else {
-                    console.error('❌ ScannerManager не загружен');
-                    // Пробуем снова через секунду
-                    setTimeout(initializeScannerManager, 1000);
-                }
+                window.scannerManager = new ScannerManager();
+                scannerManagerInitialized = true;
+                console.log('✅ ScannerManager успешно инициализирован');
             } catch (error) {
-                console.error('❌ Ошибка инициализации:', error);
-                setTimeout(initializeScannerManager, 2000);
+                console.error('❌ Ошибка инициализации ScannerManager:', error);
             }
         }
 
-        // Запускаем инициализацию при загрузке DOM
+        // Запускаем только один раз при загрузке DOM
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('📄 DOM загружен, начинаем инициализацию');
-            initializeScannerManager();
+            console.log('📄 DOM загружен');
+            setTimeout(initializeScannerManager, 100);
         });
 
         // Резервная инициализация
