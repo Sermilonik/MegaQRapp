@@ -88,44 +88,37 @@ class ScannerManager {
         try {
             // Пробуем загрузить из localStorage
             const savedContractors = localStorage.getItem('honest_sign_contractors');
-            console.log('- Данные в localStorage:', savedContractors);
+            console.log('1. Данные в localStorage:', savedContractors ? `Найдено ${savedContractors.length} символов` : '❌ Пусто');
             
             if (savedContractors) {
+                console.log('2. Содержимое localStorage:', savedContractors.substring(0, 200) + '...');
+
                 try {
                     const parsed = JSON.parse(savedContractors);
+                    console.log('3. Успешно распарсено, количество:', parsed.length);
+                    console.log('4. Конкретные контрагенты:', parsed.map(c => `${c.id}: ${c.name}`));
                     
-                    // ПРОВЕРЯЕМ ЧТО ЭТО МАССИВ И НЕ ПУСТОЙ
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        this.allContractors = parsed;
-                        console.log('✅ Загружено контрагентов из хранилища:', this.allContractors.length);
-                        this.validateContractorsData();
-                    } else {
-                        // Если данные есть, но они некорректные - загружаем стандартные
-                        console.warn('⚠️ Данные в хранилище некорректные, загружаем стандартные');
-                        this.loadDefaultContractors();
-                        this.saveContractors();
-                    }
+                    this.allContractors = parsed;
+                    console.log('✅ Загружено контрагентов из хранилища:', this.allContractors.length);
+                    
                 } catch (parseError) {
                     console.error('❌ Ошибка парсинга JSON:', parseError);
-                    console.log('Содержимое которое не парсится:', savedContractors);
                     this.loadDefaultContractors();
                     this.saveContractors();
                 }
+                
             } else {
-                // Если в хранилище нет данных, загружаем стандартные
                 console.warn('⚠️ Нет сохраненных контрагентов, загружаем стандартные');
                 this.loadDefaultContractors();
-                // Сохраняем стандартные в хранилище
                 this.saveContractors();
             }
             
-            console.log('- Итоговое количество контрагентов:', this.allContractors.length);
+            console.log('5. Итоговое количество контрагентов:', this.allContractors.length);
+            console.log('6. Конкретные контрагенты после загрузки:', this.allContractors.map(c => c.name));
             this.initContractorSearch();
-            console.log('7. Содержимое allContractors:', this.allContractors);
             
         } catch (error) {
-            console.error('❌ Ошибка загрузки контрагентов:', error);
-            // При любой ошибке загружаем стандартных и сохраняем
+            console.error('❌ Общая ошибка загрузки контрагентов:', error);
             this.loadDefaultContractors();
             this.saveContractors();
         }
@@ -335,6 +328,20 @@ class ScannerManager {
             // Сохраняем в хранилище
             console.log('💾 Сохраняем контрагентов...');
             this.saveContractors();
+
+            console.log('🔍 ПРОВЕРКА СРАЗУ ПОСЛЕ СОХРАНЕНИЯ:');
+        const immediatelyAfterSave = localStorage.getItem('honest_sign_contractors');
+        console.log('- Данные сразу после saveContractors():', immediatelyAfterSave);
+        
+        if (immediatelyAfterSave) {
+            try {
+                const parsed = JSON.parse(immediatelyAfterSave);
+                console.log('- Количество контрагентов в хранилище:', parsed.length);
+                console.log('- Содержимое:', parsed.map(c => c.name));
+            } catch (e) {
+                console.error('- Ошибка парсинга:', e);
+            }
+        }
             
             // Обновляем интерфейс
             console.log('🔄 Обновляем интерфейс...');
@@ -538,6 +545,10 @@ class ScannerManager {
 
     // ЗАГРУЗКА СПИСКА ДЛЯ МЕНЕДЖЕРА
     loadContractorsManagerList() {
+        console.log('🔍 Загрузка списка контрагентов в менеджер:');
+        console.log('- Текущее количество контрагентов:', this.allContractors.length);
+        console.log('- Содержимое allContractors:', this.allContractors.map(c => c.name));
+
         const container = document.getElementById('contractorsManagerList');
         if (!container) return;
         
@@ -568,6 +579,8 @@ class ScannerManager {
                 </div>
             </div>
         `).join('');
+
+        console.log('✅ Список контрагентов обновлен, элементов:', this.allContractors.length);
     }
 
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
