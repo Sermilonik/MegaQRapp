@@ -1,5 +1,9 @@
 class ScannerManager {
     constructor() {
+        if (window.scannerManager) {
+            console.log('⚠️ ScannerManager уже существует! Возвращаем существующий экземпляр.');
+            return window.scannerManager;
+        }
 
     // Ждем загрузки AppState
         if (typeof AppState === 'undefined') {
@@ -75,6 +79,11 @@ class ScannerManager {
     // ЗАГРУЗКА КОНТРАГЕНТОВ
     loadContractors() {
         console.log('🔍 Загрузка контрагентов...');
+
+        if (this._contractorsLoaded) {
+            console.log('⚠️ Контрагенты уже загружены, пропускаем');
+            return;
+        }
         
         try {
             // Пробуем загрузить из localStorage
