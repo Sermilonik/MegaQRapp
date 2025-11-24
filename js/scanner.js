@@ -575,7 +575,7 @@ class ScannerManager {
             const isSearchInput = e.target === searchInput;
             const isInDropdown = dropdown.contains(e.target);
             const isDropdownItem = e.target.closest('.dropdown-item');
-            
+            attachEventListeners()
             // Если dropdown скрыт, не обрабатываем клики для его скрытия
             if (dropdown.classList.contains('hidden')) {
                 return;
@@ -1505,6 +1505,60 @@ class ScannerManager {
                 console.log('📥 Импорт контрагентов');
                 this.showImportForm();
             }
+            // ДОБАВЛЕНО: Главная кнопка открытия менеджера контрагентов
+            else if (target.closest('[data-action="showContractorManager"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('👥 Открытие менеджера контрагентов');
+                this.showContractorManager();
+            }
+            // ДОБАВЛЕНО: Обработка кнопок отмены в формах
+            else if (target.closest('[data-action="hideAddContractorForm"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('❌ Отмена добавления контрагента');
+                this.hideAddContractorForm();
+            }
+            else if (target.closest('[data-action="hideImportForm"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('❌ Отмена импорта');
+                this.hideImportForm();
+            }
+            else if (target.closest('[data-action="hideContractorManager"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('👥 Закрытие менеджера контрагентов');
+                this.hideContractorManager();
+            }
+            // ДОБАВЛЕНО: Очистка всех контрагентов
+            else if (target.closest('[data-action="clearContractors"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🧹 Очистка всех контрагентов');
+                this.clearContractors();
+            }
+            // ДОБАВЛЕНО: Добавление контрагента
+            else if (target.closest('[data-action="addContractor"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('✅ Добавление контрагента');
+                this.addContractor();
+            }
+            // ДОБАВЛЕНО: Импорт контрагентов
+            else if (target.closest('[data-action="importContractors"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('📥 Импорт контрагентов из формы');
+                this.importContractors();
+            }
+            // ДОБАВЛЕНО: Экспорт контрагентов
+            else if (target.closest('[data-action="exportContractors"]')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('📤 Экспорт контрагентов');
+                this.exportContractors();
+            }
             // Обработка кнопок в модальном окне управления контрагентами
             else if (target.id === 'refreshReports' || target.closest('#refreshReports')) {
                 e.preventDefault();
@@ -1517,6 +1571,13 @@ class ScannerManager {
                 e.stopPropagation();
                 console.log('🗑️ Удаление всех отчетов');
                 this.deleteAllPendingReports();
+            }
+            // ДОБАВЛЕНО: Закрытие по клику вне модального окна
+            else if (target.id === 'contractorManager' || target.classList.contains('modal-overlay')) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('🎯 Закрытие по клику вне модального окна');
+                this.hideContractorManager();
             }
         });
     
@@ -1608,7 +1669,7 @@ class ScannerManager {
         }
     }
     
-    // ДОБАВЬТЕ этот метод для надежных обработчиков
+    // метод для надежных обработчиков
     setupRobustEventHandlers() {
         // Дублируем основные обработчики для APK
         const buttons = [
@@ -1636,6 +1697,27 @@ class ScannerManager {
                     this[btn.method]();
                 });
             }
+        });
+    
+        // ДОБАВЛЕНО: Обработчики для кнопок управления контрагентами
+        const contractorButtons = [
+            { selector: '[data-action="showContractorManager"]', method: 'showContractorManager' },
+            { selector: '[data-action="hideAddContractorForm"]', method: 'hideAddContractorForm' },
+            { selector: '[data-action="hideImportForm"]', method: 'hideImportForm' },
+            { selector: '[data-action="hideContractorManager"]', method: 'hideContractorManager' },
+            { selector: '[data-action="clearContractors"]', method: 'clearContractors' }
+        ];
+    
+        contractorButtons.forEach(btn => {
+            const elements = document.querySelectorAll(btn.selector);
+            elements.forEach(element => {
+                element.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log(`🎯 ${btn.method} вызван`);
+                    this[btn.method]();
+                });
+            });
         });
     }
 
