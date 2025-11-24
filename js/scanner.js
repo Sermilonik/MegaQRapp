@@ -162,12 +162,18 @@ class ScannerManager {
         }
     }
 
-    // прячем
+    // прячем управление клиентами
     hideContractorManager() {
+        console.log('👥 Скрываем менеджер контрагентов');
+        
         const modal = document.getElementById('contractorManager');
         if (modal) {
             modal.classList.add('hidden');
+            // Восстанавливаем прокрутку страницы
             document.body.style.overflow = '';
+            console.log('✅ Менеджер контрагентов скрыт');
+        } else {
+            console.error('❌ Модальное окно не найдено');
         }
     }
     
@@ -475,13 +481,29 @@ class ScannerManager {
 
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     hideAddContractorForm() {
+        console.log('❌ Скрываем форму добавления контрагента');
+        
         const addForm = document.getElementById('addContractorForm');
-        if (addForm) addForm.classList.add('hidden');
+        if (addForm) {
+            addForm.classList.add('hidden');
+            console.log('✅ Форма добавления скрыта');
+        }
+        
+        // Также скрываем форму импорта если открыта
+        const importForm = document.getElementById('importForm');
+        if (importForm) {
+            importForm.classList.add('hidden');
+        }
     }
 
     hideImportForm() {
+        console.log('❌ Скрываем форму импорта');
+        
         const importForm = document.getElementById('importForm');
-        if (importForm) importForm.classList.add('hidden');
+        if (importForm) {
+            importForm.classList.add('hidden');
+            console.log('✅ Форма импорта скрыта');
+        }
     }
 
     selectContractorInManager(contractorId) {
@@ -554,6 +576,12 @@ class ScannerManager {
             const isInDropdown = dropdown.contains(e.target);
             const isDropdownItem = e.target.closest('.dropdown-item');
             
+            // Если dropdown скрыт, не обрабатываем клики для его скрытия
+            if (dropdown.classList.contains('hidden')) {
+                return;
+            }
+            
+            // Скрываем только если клик был ВНЕ области поиска и dropdown
             if (!isSearchInput && !isInDropdown && !isDropdownItem) {
                 this.hideDropdown();
             }
