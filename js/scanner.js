@@ -82,19 +82,26 @@ class ScannerManager {
             console.log('- Данные в localStorage:', savedContractors);
             
             if (savedContractors) {
-                const parsed = JSON.parse(savedContractors);
-                
-                // ПРОВЕРЯЕМ ЧТО ЭТО МАССИВ И НЕ ПУСТОЙ
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    this.allContractors = parsed;
-                    console.log('✅ Загружено контрагентов из хранилища:', this.allContractors.length);
-                } else {
-                    // Если данные есть, но они некорректные - загружаем стандартные
-                    console.warn('⚠️ Данные в хранилище некорректные, загружаем стандартные');
+                try {
+                    const parsed = JSON.parse(savedContractors);
+                    
+                    // ПРОВЕРЯЕМ ЧТО ЭТО МАССИВ И НЕ ПУСТОЙ
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        this.allContractors = parsed;
+                        console.log('✅ Загружено контрагентов из хранилища:', this.allContractors.length);
+                        this.validateContractorsData();
+                    } else {
+                        // Если данные есть, но они некорректные - загружаем стандартные
+                        console.warn('⚠️ Данные в хранилище некорректные, загружаем стандартные');
+                        this.loadDefaultContractors();
+                        this.saveContractors();
+                    }
+                } catch (parseError) {
+                    console.error('❌ Ошибка парсинга JSON:', parseError);
+                    console.log('Содержимое которое не парсится:', savedContractors);
                     this.loadDefaultContractors();
                     this.saveContractors();
                 }
-                
             } else {
                 // Если в хранилище нет данных, загружаем стандартные
                 console.warn('⚠️ Нет сохраненных контрагентов, загружаем стандартные');
@@ -105,6 +112,7 @@ class ScannerManager {
             
             console.log('- Итоговое количество контрагентов:', this.allContractors.length);
             this.initContractorSearch();
+            console.log('7. Содержимое allContractors:', this.allContractors);
             
         } catch (error) {
             console.error('❌ Ошибка загрузки контрагентов:', error);
@@ -112,6 +120,76 @@ class ScannerManager {
             this.loadDefaultContractors();
             this.saveContractors();
         }
+    }
+
+    // Проверяем целостность данных контрагентов
+    validateContractorsData() {
+        console.log('🔍 Проверка целостности данных контрагентов...');
+        
+        let hasErrors = false;
+        
+        // Проверяем каждый контрагент
+        this.allContractors = this.allContractors.filter(contractor => {
+            // Проверяем обязательные поля
+            if (!contractor.id || !contractor.name) {
+                console.warn('⚠️ Удален некорректный контрагент:', contractor);
+                hasErrors = true;
+                return false;
+            }
+            
+            // Проверяем типы данных
+            if (typeof contractor.id !== 'number' || typeof contractor.name !== 'string') {
+                console.warn('⚠️ Исправлен контрагент с некорректными типами:', contractor);
+                contractor.id = parseInt(contractor.id) || Date.now();
+                contractor.name = String(contractor.name || '');
+                contractor.category = String(contractor.category || 'Общая категория');
+                hasErrors = true;
+            }
+            
+            return true;
+        });
+        
+        // Исправляем дублирующиеся ID
+        this.fixDuplicateIds();
+        
+        if (hasErrors) {
+            console.log('🔄 Обнаружены ошибки в данных, сохраняем исправленные данные...');
+            this.saveContractors();
+        }
+        
+        console.log('✅ Проверка целостности завершена');
+    }
+
+    // НОВЫЙ МЕТОД: Для отладки - показывает сохраненные данные
+    debugStorage() {
+        console.log('🐛 ОТЛАДКА ХРАНИЛИЩА:');
+        
+        const keys = ['honest_sign_contractors', 'honest_sign_selected_contractors'];
+        
+        keys.forEach(key => {
+            const value = localStorage.getItem(key);
+            console.log(`- ${key}:`, value ? `Данные есть (${value.length} символов)` : '❌ Нет данных');
+            
+            if (value) {
+                try {
+                    const parsed = JSON.parse(value);
+                    console.log(`  ↳ Парсинг:`, Array.isArray(parsed) ? `Массив из ${parsed.length} элементов` : 'Объект');
+                } catch (e) {
+                    console.log(`  ↳ ❌ Ошибка парсинга:`, e.message);
+                }
+            }
+        });
+        
+        // Показываем информацию в интерфейсе
+        const contractorsCount = this.allContractors.length;
+        const savedCount = localStorage.getItem('honest_sign_contractors') ? 'есть' : 'нет';
+        
+        showInfo(`
+            📊 Статус хранения:
+            • Контрагентов в памяти: ${contractorsCount}
+            • Данные в хранилище: ${savedCount}
+            • Выбрано: ${this.selectedContractors.length}
+        `, 5000);
     }
 
     // УПРАВЛЕНИЕ КОНТРАГЕНТАМИ
@@ -240,6 +318,10 @@ class ScannerManager {
             // Добавляем в массив
             this.allContractors.push(newContractor);
             console.log('- Контрагентов после добавления:', this.allContractors.length);
+            console.log('🔍 ДИАГНОСТИКА перед сохранением:');
+            console.log('- Состояние allContractors:', this.allContractors);
+            console.log('- Тип allContractors:', typeof this.allContractors);
+            console.log('- Является массивом:', Array.isArray(this.allContractors));
             
             // Сохраняем в хранилище
             console.log('💾 Сохраняем контрагентов...');
@@ -741,6 +823,55 @@ class ScannerManager {
         }
     }
 
+    // НОВЫЙ МЕТОД: Детальная проверка процесса сохранения
+    debugSaveProcess() {
+        console.log('🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА СОХРАНЕНИЯ:');
+        
+        // Проверяем текущее состояние
+        console.log('1. Текущие контрагенты в памяти:', this.allContractors);
+        console.log('2. Количество контрагентов:', this.allContractors.length);
+        
+        // Проверяем localStorage до сохранения
+        const beforeSave = localStorage.getItem('honest_sign_contractors');
+        console.log('3. Данные в localStorage ДО сохранения:', beforeSave ? `Есть (${beforeSave.length} символов)` : '❌ Пусто');
+        
+        // Пробуем сохранить
+        try {
+            const testData = JSON.stringify(this.allContractors);
+            console.log('4. JSON для сохранения:', testData);
+            
+            localStorage.setItem('honest_sign_contractors', testData);
+            
+            // Проверяем после сохранения
+            const afterSave = localStorage.getItem('honest_sign_contractors');
+            console.log('5. Данные в localStorage ПОСЛЕ сохранения:', afterSave ? `Есть (${afterSave.length} символов)` : '❌ Пусто');
+            
+            console.log('6. Сохранение успешно:', beforeSave !== afterSave ? '✅ Да' : '❌ Нет');
+            
+            if (afterSave) {
+                try {
+                    const parsed = JSON.parse(afterSave);
+                    console.log('7. Проверка парсинга:', Array.isArray(parsed) ? `✅ Массив из ${parsed.length} элементов` : '❌ Не массив');
+                } catch (parseError) {
+                    console.log('7. ❌ Ошибка парсинга сохраненных данных:', parseError);
+                }
+            }
+            
+            // Показываем в консоли отладки
+            if (typeof addToConsole === 'function') {
+                addToConsole('<strong>🔍 РЕЗУЛЬТАТЫ ДИАГНОСТИКИ:</strong>');
+                addToConsole(`• Контрагентов в памяти: ${this.allContractors.length}`);
+                addToConsole(`• Данные в хранилище: ${afterSave ? '✅ Есть' : '❌ Нет'}`);
+                addToConsole(`• Сохранение успешно: ${beforeSave !== afterSave ? '✅ Да' : '❌ Нет'}`);
+            }
+            
+        } catch (error) {
+            console.error('8. ❌ Ошибка при тестовом сохранении:', error);
+            if (typeof addToConsole === 'function') {
+                addToConsole(`❌ Ошибка сохранения: ${error.message}`);
+            }
+        }
+    }
     // ПОКАЗ/СКРЫТИЕ ВЫПАДАЮЩЕГО СПИСКА
     showDropdown() {
         const dropdown = document.getElementById('contractorDropdown');
@@ -1825,12 +1956,18 @@ class ScannerManager {
             console.log('- Сохраняем контрагентов:', this.allContractors.length);
             console.log('- Данные для сохранения:', this.allContractors);
             
+            // Добавляем timestamp для отслеживания
+            const contractorsToSave = this.allContractors.map(contractor => ({
+                ...contractor,
+                updatedAt: new Date().toISOString()
+            }));
+            
             // Преобразуем в чистый JSON
-            const contractorsToSave = JSON.stringify(this.allContractors);
-            console.log('- JSON для сохранения:', contractorsToSave);
+            const jsonData = JSON.stringify(contractorsToSave);
+            console.log('- JSON для сохранения:', jsonData);
             
             // Сохраняем в localStorage
-            localStorage.setItem('honest_sign_contractors', contractorsToSave);
+            localStorage.setItem('honest_sign_contractors', jsonData);
             
             // ПРОВЕРЯЕМ СОХРАНЕНИЕ
             const saved = localStorage.getItem('honest_sign_contractors');
@@ -1840,12 +1977,17 @@ class ScannerManager {
                 const parsed = JSON.parse(saved);
                 console.log('- Проверка данных:', parsed.length === this.allContractors.length ? '✅ Данные совпадают' : '❌ Данные не совпадают');
                 console.log('- Сохранено контрагентов:', parsed.length);
+                
+                // Показываем уведомление пользователю
+                showSuccess(`✅ Сохранено ${parsed.length} контрагентов`, 2000);
             } else {
                 console.error('❌ Данные не сохранились в localStorage');
+                showError('❌ Ошибка сохранения контрагентов');
             }
             
         } catch (error) {
             console.error('❌ КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ:', error);
+            showError('Ошибка сохранения контрагентов');
             
             // Пробуем сохранить хотя бы основные данные
             try {
