@@ -152,28 +152,87 @@ class AppState {
     }
 
     importContractorsFromCSV(csvData) {
+        console.log('📥 AppState: Импорт контрагентов из CSV');
+        
         try {
             const lines = csvData.split('\n').filter(line => line.trim());
-            const imported = [];
-        
-            for (let i = 1; i < lines.length; i++) {
-                const cells = this.parseCSVLine(lines[i]);
-                if (cells.length >= 2) {
-                    const name = cells[0].replace(/"/g, '').trim();
-                    const category = cells[1] ? cells[1].replace(/"/g, '').trim() : 'Партнер';
+            
+            if (lines.length === 0) {
+                throw new Error('Файл пустой');
+            }
+            
+            let importedCount = 0;
+            let skippedCount = 0;
+            
+            console.log(`📊 Найдено строк в CSV: ${lines.length}`);
+            
+            // Обрабатываем каждую строку
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
                 
-                    if (name && !this.contractors.some(c => c.name === name)) {
-                        const contractor = this.addContractor(name, category);
-                        imported.push(contractor);
+                // Пропускаем пустые строки и заголовки
+                if (!line || this.isHeaderLine(line)) {
+                    console.log(`⏭️ Пропускаем строку ${i + 1}: "${line}"`);
+                    skippedCount++;
+                    continue;
+                }
+                
+                const cells = this.parseCSVLine(line);
+                console.log(`📝 Обработка строки ${i + 1}:`, cells);
+                
+                if (cells.length >= 1) {
+                    const name = cells[0].replace(/"/g, '').trim();
+                    const category = cells[1] ? cells[1].replace(/"/g, '').trim() : 'Импортированные';
+                    
+                    if (name) {
+                        // Проверяем дубликаты
+                        const exists = this.contractors.some(c => 
+                            c.name.toLowerCase() === name.toLowerCase()
+                        );
+                        
+                        if (!exists) {
+                            const contractor = this.addContractor(name, category);
+                            importedCount++;
+                            console.log(`✅ Добавлен: ${name}`);
+                        } else {
+                            skippedCount++;
+                            console.log(`⏭️ Дубликат: ${name}`);
+                        }
+                    } else {
+                        skippedCount++;
+                        console.log(`⏭️ Пустое название в строке ${i + 1}`);
                     }
+                } else {
+                    skippedCount++;
+                    console.log(`⏭️ Недостаточно данных в строке ${i + 1}`);
                 }
             }
-        
-            return imported;
+            
+            console.log(`📊 Итоги импорта: добавлено ${importedCount}, пропущено ${skippedCount}`);
+            
+            if (importedCount > 0) {
+                showSuccess(`Импортировано ${importedCount} контрагентов`, 5000);
+            } else {
+                showWarning('Не найдено новых контрагентов для импорта', 5000);
+            }
+            
+            return importedCount;
+            
         } catch (error) {
-            console.error('Import error:', error);
-            throw new Error('Ошибка импорта данных');
+            console.error('❌ Ошибка импорта:', error);
+            showError(`Ошибка импорта: ${error.message}`);
+            throw error;
         }
+    }
+    
+    // Вспомогательный метод для определения заголовков
+    isHeaderLine(line) {
+        const headerPatterns = [
+            /название/i, /name/i, /контрагент/i, /организация/i,
+            /категория/i, /category/i, /id/i, /№/i
+        ];
+        
+        return headerPatterns.some(pattern => pattern.test(line));
     }
 
     parseCSVLine(line) {
@@ -345,6 +404,193 @@ class AppState {
         } catch (error) {
             console.error('Ошибка загрузки из localStorage:', error);
         }
+    }
+
+    // СИНХРОНИЗАЦИЯ ДАННЫХ МЕЖДУ УСТРОЙСТВАМИ
+    syncWithCloud() {
+        console.log('☁️ AppState: Синхронизация с облаком');
+        
+        // Проверяем наличие облачного API
+        if (typeof CloudSync !== 'undefined' && CloudSync.isAvailable()) {
+            return this.syncWithCloudAPI();
+        } 
+        // Проверяем наличие Firebase
+        else if (typeof firebase !== 'undefined') {
+            return this.syncWithFirebase();
+        }
+        // Базовый обмен через QR-код
+        else {
+            return this.syncWithQRCode();
+        }
+    }
+
+    // Базовый обмен данными через QR-код
+    syncWithQRCode() {
+        console.log('📱 AppState: Синхронизация через QR-код');
+        
+        const syncData = {
+            contractors: this.contractors,
+            timestamp: new Date().toISOString(),
+            device: navigator.userAgent.substring(0, 50)
+        };
+        
+        const jsonData = JSON.stringify(syncData);
+        
+        // Показываем QR-код для экспорта
+        this.showExportQRCode(jsonData);
+        
+        return new Promise((resolve) => {
+            // Здесь будет логика сканирования QR-кода для импорта
+            console.log('✅ Данные готовы для экспорта через QR-код');
+            resolve(true);
+        });
+    }
+
+    showExportQRCode(data) {
+        // Создаем модальное окно с QR-кодом
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 10000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center;">
+                <h3>📱 Синхронизация данных</h3>
+                <p>Отсканируйте этот QR-код на другом устройстве:</p>
+                <div id="qrcodeContainer"></div>
+                <button onclick="this.closest('.sync-modal').remove()" 
+                        style="margin-top: 15px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
+                    Закрыть
+                </button>
+            </div>
+        `;
+        
+        modal.className = 'sync-modal';
+        document.body.appendChild(modal);
+        
+        // Генерируем QR-код (нужна библиотека QRCode.js)
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(document.getElementById('qrcodeContainer'), {
+                text: data,
+                width: 200,
+                height: 200
+            });
+        }
+    }
+
+    // Импорт данных из QR-кода
+    importFromQRCode(jsonData) {
+        try {
+            const data = JSON.parse(jsonData);
+            
+            if (data.contractors && Array.isArray(data.contractors)) {
+                console.log(`📥 Импорт ${data.contractors.length} контрагентов`);
+                
+                let importedCount = 0;
+                
+                data.contractors.forEach(contractor => {
+                    // Проверяем дубликаты по ID и имени
+                    const existsById = this.contractors.some(c => c.id === contractor.id);
+                    const existsByName = this.contractors.some(c => c.name === contractor.name);
+                    
+                    if (!existsById && !existsByName) {
+                        this.contractors.push(contractor);
+                        importedCount++;
+                    }
+                });
+                
+                this.saveContractors();
+                showSuccess(`Импортировано ${importedCount} контрагентов`, 5000);
+                return true;
+            }
+        } catch (error) {
+            console.error('❌ Ошибка импорта из QR-кода:', error);
+            showError('Ошибка импорта данных');
+        }
+        return false;
+    }
+
+    // Экспорт данных для синхронизации
+    exportForSync() {
+        const exportData = {
+            contractors: this.contractors,
+            timestamp: new Date().toISOString(),
+            version: '1.0',
+            total: this.contractors.length
+        };
+        
+        console.log(`📤 Экспорт ${this.contractors.length} контрагентов`);
+        return JSON.stringify(exportData, null, 2);
+    }
+
+    manualImport(jsonData) {
+        try {
+            const data = JSON.parse(jsonData);
+            
+            if (data.contractors && Array.isArray(data.contractors)) {
+                console.log(`📥 Импорт ${data.contractors.length} контрагентов`);
+                
+                let importedCount = 0;
+                
+                data.contractors.forEach(contractor => {
+                    // Проверяем дубликаты по ID и имени
+                    const existsById = this.contractors.some(c => c.id === contractor.id);
+                    const existsByName = this.contractors.some(c => c.name === contractor.name);
+                    
+                    if (!existsById && !existsByName) {
+                        this.contractors.push(contractor);
+                        importedCount++;
+                    }
+                });
+                
+                this.saveContractors();
+                showSuccess(`Импортировано ${importedCount} контрагентов`, 5000);
+                return importedCount;
+            }
+        } catch (error) {
+            console.error('❌ Ошибка импорта:', error);
+            showError('Ошибка импорта данных');
+        }
+        return 0;
+    }
+    
+    syncWithQRCode() {
+        console.log('📱 AppState: Показать QR-код для синхронизации');
+        
+        const exportData = this.exportForSync();
+        
+        // Создаем модальное окно с информацией
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 10000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center; max-width: 90%;">
+                <h3>📱 Синхронизация данных</h3>
+                <p>Экспортировано контрагентов: <strong>${this.contractors.length}</strong></p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0;">
+                    <p><strong>Скопируйте этот текст на другом устройстве:</strong></p>
+                    <textarea style="width: 100%; height: 100px; border: 1px solid #ddd; border-radius: 4px; padding: 8px; font-family: monospace; font-size: 12px;" readonly>${exportData}</textarea>
+                </div>
+                <p><small>На другом устройстве используйте "Импорт данных" → Вставить JSON</small></p>
+                <button onclick="this.closest('.sync-modal').remove()" 
+                        style="margin-top: 15px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
+                    Закрыть
+                </button>
+            </div>
+        `;
+        
+        modal.className = 'sync-modal';
+        document.body.appendChild(modal);
+    }
+    
+    importFromQRCode(jsonData) {
+        return this.manualImport(jsonData);
     }
 }
 
