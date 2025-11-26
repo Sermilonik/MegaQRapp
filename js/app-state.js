@@ -16,9 +16,32 @@ class AppState {
     }
     
     init() {
-        this.loadContractors(); // ИСПРАВЛЕНО: загружаем контрагентов первым делом
+        this.loadContractors();
         this.loadFromStorage();
-        this.ensureDefaultContractors();
+        this.ensureDefaultContractors(); // Теперь этот метод существует
+    }
+    
+    // Гарантируем наличие контрагентов по умолчанию
+    ensureDefaultContractors() {
+        console.log('🔄 AppState: Проверка контрагентов по умолчанию');
+        
+        // Если контрагентов нет вообще - создаем стандартных
+        if (this.contractors.length === 0) {
+            console.log('📝 AppState: Создаем контрагентов по умолчанию');
+            
+            const defaultContractors = [
+                { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель', createdAt: new Date().toISOString() },
+                { id: 2, name: 'ИП Иванов', category: 'Розничная сеть', createdAt: new Date().toISOString() },
+                { id: 3, name: 'ООО "Луч"', category: 'Дилер', createdAt: new Date().toISOString() },
+                { id: 4, name: 'АО "Вектор"', category: 'Партнер', createdAt: new Date().toISOString() }
+            ];
+            
+            this.contractors = defaultContractors;
+            this.saveContractors();
+            console.log('✅ AppState: Созданы контрагенты по умолчанию');
+        } else {
+            console.log(`✅ AppState: Уже есть ${this.contractors.length} контрагентов`);
+        }
     }
 
     // ОСНОВНОЙ МЕТОД ЗАГРУЗКИ КОНТРАГЕНТОВ
@@ -32,7 +55,7 @@ class AppState {
                 this.contractors = JSON.parse(savedContractors);
                 console.log(`✅ AppState: Загружено ${this.contractors.length} контрагентов из localStorage`);
             } else {
-                console.log('ℹ️ AppState: Нет сохраненных контрагентов, будут созданы стандартные');
+                console.log('ℹ️ AppState: Нет сохраненных контрагентов');
             }
         } catch (error) {
             console.error('❌ AppState: Ошибка загрузки контрагентов:', error);
@@ -63,77 +86,7 @@ class AppState {
         }
     }
 
-    // Обновляем метод сохранения отчета
-    saveReport(report) {
-        console.log('💾 Saving report with data:', report);
-
-        // Добавляем порядковый номер
-        report.sequentialNumber = this.reportCounter++;
-        report.submittedAt = new Date().toISOString();
-
-        console.log('🔢 Assigned sequential number:', report.sequentialNumber);
-        console.log('👥 Contractors in report:', report.contractors);
-        
-        this.reports.unshift(report);
-        this.saveReports(this.reports);
-        
-        // Очищаем текущую сессию после сохранения отчета
-        this.clearCurrentSession();
-        
-        // Сохраняем счетчик в localStorage
-        this.saveToStorage();
-
-        console.log('✅ Report saved successfully');
-    }
-
-    // Обновляем метод загрузки
-    loadFromStorage() {
-        try {
-            const savedSession = localStorage.getItem('honest_sign_current_session');
-            const savedSentSessions = localStorage.getItem('honest_sign_sent_sessions');
-            const savedReports = localStorage.getItem('honest_sign_reports');
-            const savedCounter = localStorage.getItem('honest_sign_report_counter');
-
-            if (savedSession) {
-                this.currentSession = JSON.parse(savedSession);
-            }
-            
-            if (savedSentSessions) {
-                this.sentSessions = JSON.parse(savedSentSessions);
-            }
-            
-            if (savedReports) {
-                this.reports = JSON.parse(savedReports);
-            }
-            
-            if (savedCounter) {
-                this.reportCounter = parseInt(savedCounter);
-            }
-        } catch (error) {
-            console.error('Ошибка загрузки из localStorage:', error);
-        }
-    }
-
-    // Обновляем метод сохранения
-    saveToStorage() {
-        localStorage.setItem('honest_sign_current_session', JSON.stringify(this.currentSession));
-        localStorage.setItem('honest_sign_sent_sessions', JSON.stringify(this.sentSessions));
-        localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
-        localStorage.setItem('honest_sign_report_counter', this.reportCounter.toString()); // Сохраняем счетчик
-    }
-
-
-    startNewSession(contractorIds) {
-        this.currentSession = {
-            id: this.generateId(),
-            contractorIds: Array.isArray(contractorIds) ? contractorIds : [contractorIds], // Сохраняем массив ID
-            scannedCodes: [],
-            createdAt: new Date().toISOString()
-        };
-        this.saveToStorage();
-    }
-
-    // Контрагенты
+    // Контрагенты - геттеры
     getContractors() {
         return this.contractors;
     }
@@ -158,7 +111,7 @@ class AppState {
         };
     
         this.contractors.push(newContractor);
-        this.saveContractors(); // СОХРАНЯЕМ сразу после добавления
+        this.saveContractors();
         return newContractor;
     }
 
@@ -167,7 +120,7 @@ class AppState {
         if (contractor) {
             contractor.name = name;
             contractor.category = category;
-            this.saveContractors(); // СОХРАНЯЕМ после изменения
+            this.saveContractors();
             return true;
         }
         return false;
@@ -175,7 +128,7 @@ class AppState {
 
     deleteContractor(id) {
         this.contractors = this.contractors.filter(c => c.id !== id);
-        this.saveContractors(); // СОХРАНЯЕМ после удаления
+        this.saveContractors();
         return true;
     }
 
@@ -222,7 +175,7 @@ class AppState {
             throw new Error('Ошибка импорта данных');
         }
     }
-    
+
     parseCSVLine(line) {
         const result = [];
         let current = '';
@@ -359,7 +312,7 @@ class AppState {
         localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
         localStorage.setItem('honest_sign_report_counter', this.reportCounter.toString());
         
-        //Сохраняем выбранных контрагентов отдельно
+        // Сохраняем выбранных контрагентов отдельно
         const selectedContractorsData = {
             contractorIds: this.currentSession.contractorIds || [],
             timestamp: new Date().toISOString()
