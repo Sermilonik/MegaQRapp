@@ -599,77 +599,51 @@
             }
         }
 
-        // Запускаем ТОЛЬКО ОДИН РАЗ при загрузке DOM
+        // Простая инициализация
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('📄 DOM загружен - запускаем инициализацию');
-            initializeScannerManager();
+            console.log('📄 DOM загружен - проверяем ScannerManager');
+            
+            // Если ScannerManager еще не создан, создаем его
+            if (!window.scannerManager && typeof ScannerManager !== 'undefined') {
+                console.log('🔄 Создаем новый ScannerManager...');
+                try {
+                    window.scannerManager = new ScannerManager();
+                    console.log('✅ ScannerManager создан успешно');
+                } catch (error) {
+                    console.error('❌ Ошибка создания ScannerManager:', error);
+                }
+            } else if (window.scannerManager) {
+                console.log('✅ ScannerManager уже создан');
+            } else {
+                console.error('❌ ScannerManager класс не загружен');
+            }
         });
 
-        // Функция для принудительной переинициализации (для отладки)
-        window.reinitScannerManager = function() {
-            scannerManagerInitialized = false;
-            initializeScannerManager();
+        // Глобальные функции для отладки
+        window.debugScanner = function() {
+            console.log('🔍 Отладка ScannerManager:');
+            console.log('- window.scannerManager:', window.scannerManager);
+            console.log('- allContractors:', window.scannerManager?.allContractors);
+            console.log('- localStorage contractors:', localStorage.getItem('honest_sign_contractors'));
+            
+            if (window.scannerManager) {
+                showInfo(`
+                    ScannerManager: ✅ Активен
+                    Контрагентов: ${window.scannerManager.allContractors.length}
+                    Выбрано: ${window.scannerManager.selectedContractors.length}
+                `, 5000);
+            } else {
+                showError('ScannerManager не доступен');
+            }
         };
 
-        // ОБРАБОТКА ВИДИМОСТИ СТРАНИЦЫ
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden && window.scannerManager && window.scannerManager.isScanning) {
-                console.log('📄 Страница скрыта, останавливаем камеру...');
-                window.scannerManager.stopCamera().catch(error => {
-                    console.log('⚠️ Ошибка при остановке камеры:', error);
-                });
+        window.reloadContractors = function() {
+            if (window.scannerManager) {
+                console.log('🔄 Принудительная перезагрузка контрагентов...');
+                window.scannerManager.loadContractors();
+                showSuccess('Контрагенты перезагружены', 3000);
             }
-        });
-        
-        // ОБРАБОТКА ПЕРЕХОДА ПО ССЫЛКАМ
-        document.addEventListener('click', (e) => {
-            const link = e.target.closest('a');
-            if (link && link.href && link.href !== window.location.href) {
-                if (window.scannerManager && window.scannerManager.isScanning) {
-                    console.log('🔗 Обнаружен переход по ссылке, очищаем камеру...');
-                    setTimeout(() => {
-                        window.scannerManager.stopCamera().catch(error => {
-                            console.log('⚠️ Ошибка при остановке камеры для перехода:', error);
-                        });
-                    }, 100);
-                }
-            }
-        });
-
-        // ФУНКЦИИ СИНХРОНИЗАЦИИ
-        function handleFileImport(file) {
-            if (!file) return;
-            
-            if (confirm('Импортировать данные из файла? Существующие данные будут объединены.')) {
-                // Здесь будет логика импорта
-                showInfo('Функция импорта в разработке', 3000);
-            }
-        }
-        
-        function showSyncStatus() {
-            const lastSync = localStorage.getItem('last_sync_time');
-            const deviceInfo = navigator.userAgent;
-            
-            let message = `📱 Устройство: ${deviceInfo}\n`;
-            message += `📏 Экран: ${screen.width}x${screen.height}\n`;
-            message += `🖐️ Touch: ${'ontouchstart' in window ? 'Да' : 'Нет'}\n`;
-            
-            if (lastSync) {
-                message += `🕐 Последняя синхронизация: ${new Date(lastSync).toLocaleString('ru-RU')}`;
-            } else {
-                message += '🕐 Синхронизация не выполнялась';
-            }
-            
-            showInfo(message, 5000);
-        }
-        
-        // Инициализация при загрузке
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(() => {
-                // Проверка синхронизации
-                showInfo('APK приложение готово к работе', 3000);
-            }, 5000);
-        });
+        };
 
         // МОБИЛЬНАЯ КОНСОЛЬ ДЛЯ СКАНЕРА
         let consoleVisible = false;
@@ -711,6 +685,15 @@
                     break;
                 case 'camera':
                     testCameraManually();
+                    break;
+                    case 'status':
+                    showScannerStatus();
+                break;
+                case 'reload':
+                    if (window.scannerManager) {
+                        window.scannerManager.loadContractors();
+                        addToConsole('✅ Контрагенты перезагружены');
+                    }
                     break;
                 case 'contractors':
                     showContractorsDebug();
@@ -782,6 +765,19 @@
             if (navigator.mediaDevices) {
                 addToConsole(`• getUserMedia: ${!!navigator.mediaDevices.getUserMedia ? '✅' : '❌'}`);
                 addToConsole(`• enumerateDevices: ${!!navigator.mediaDevices.enumerateDevices ? '✅' : '❌'}`);
+            }
+        }
+
+        function showScannerStatus() {
+            addToConsole('<strong>📊 Статус ScannerManager:</strong>');
+            addToConsole(`• Глобальная переменная: ${window.scannerManager ? '✅ Есть' : '❌ Нет'}`);
+            
+            if (window.scannerManager) {
+                addToConsole(`• Контрагентов: ${window.scannerManager.allContractors.length}`);
+                addToConsole(`• Выбрано: ${window.scannerManager.selectedContractors.length}`);
+                addToConsole(`• Камера: ${window.scannerManager.isScanning ? '✅ Активна' : '❌ Выключена'}`);
+            } else {
+                addToConsole('❌ ScannerManager не доступен');
             }
         }
 
