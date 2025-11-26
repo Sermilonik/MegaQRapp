@@ -218,6 +218,31 @@ class ScannerManager {
         if (searchInput) searchInput.value = '';
     }
 
+    // Импорт контрагентов из формы
+    importContractorsFromForm() {
+        const importData = document.getElementById('importData');
+        if (!importData || !importData.value.trim()) {
+            showError('Введите данные для импорта');
+            return;
+        }
+
+        if (window.appState && window.appState.importContractorsFromCSV) {
+            try {
+                const importedCount = window.appState.importContractorsFromCSV(importData.value);
+                if (importedCount > 0) {
+                    this.loadContractors(); // Перезагружаем контрагентов
+                    this.loadContractorsManagerList(); // Обновляем список в менеджере
+                    importData.value = ''; // Очищаем поле
+                    this.hideAddContractorForm();
+                }
+            } catch (error) {
+                showError(`Ошибка импорта: ${error.message}`);
+            }
+        } else {
+            showError('AppState не доступен для импорта');
+        }
+    }
+
     removeContractor(contractorId) {
         this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
         this.updateSelectedContractorsUI();
@@ -917,13 +942,24 @@ class ScannerManager {
         // Управление контрагентами
         this.setupButton('addManualContractorBtn', 'showAddContractorForm');
         this.setupButton('importContractorsBtn', 'showImportForm');
+        this.setupButton('showContractorManagerBtn', 'showContractorManager');
         
         // Модальные окна
         this.setupButton('hideContractorManager', 'hideContractorManager');
         this.setupButton('hideAddContractorForm', 'hideAddContractorForm');
         this.setupButton('clearContractors', 'clearContractors');
         this.setupButton('addContractor', 'addContractor');
-
+        this.setupButton('showAddContractorFormBtn', 'showAddContractorForm');
+        this.setupButton('showImportFormBtn', 'showImportForm');
+        this.setupButton('importContractors', 'importContractorsFromForm');
+        this.setupButton('hideImportForm', 'hideAddContractorForm');
+    
+        // ДОБАВЬТЕ ЭТИ СТРОКИ для кнопок синхронизации
+        this.setupSyncButton('exportData');
+        this.setupSyncButton('importData'); 
+        this.setupSyncButton('showQRCode');
+        this.setupSyncButton('scanQRCode');
+    
         // Тестовые коды
         document.addEventListener('click', (e) => {
             if (e.target.closest('.test-code')) {
@@ -935,12 +971,26 @@ class ScannerManager {
                 }
             }
         });
-
+    
         // Закрытие модальных окон
         document.addEventListener('click', (e) => {
             if (e.target.id === 'contractorManager') {
                 this.hideContractorManager();
             }
+        });
+    }
+    
+    // ВЫНЕСИТЕ ЭТОТ МЕТОД ОТДЕЛЬНО - он должен быть на том же уровне, что и setupEventListeners
+    setupSyncButton(methodName) {
+        // Ищем кнопки с onclick атрибутом
+        const buttons = document.querySelectorAll(`[onclick*="${methodName}"]`);
+        buttons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (this[methodName]) {
+                    this[methodName]();
+                }
+            });
         });
     }
 
