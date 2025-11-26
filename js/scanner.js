@@ -1,1013 +1,533 @@
-class ScannerManager {
+class AppState {
     constructor() {
-        console.log('🚀 Создание ScannerManager');
-        
-        // Проверяем существующий экземпляр
-        if (window.scannerManager) {
-            console.log('⚠️ ScannerManager уже существует');
-            return window.scannerManager;
-        }
-
-        // Сохраняем глобальную ссылку
-        window.scannerManager = this;
-
-        // Инициализируем свойства
-        this.scanner = null;
-        this.isScanning = false;
-        this.selectedContractors = [];
-        this.allContractors = [];
-        this.cleaningUp = false;
-        this._stopInProgress = false;
-        this._contractorsLoaded = false;
-        this.apkMode = false;
-
-        // Запускаем инициализацию
-        this.init();
-    }
-
-    async init() {
-        console.log('🔧 Инициализация ScannerManager');
-        
-        // Проверяем APK режим
-        this.optimizeForAPK();
-        
-        // Загружаем контрагентов
-        this.loadContractors();
-        
-        // Восстанавливаем сессию
-        this.checkExistingSession();
-        
-        // Подключаем обработчики
-        this.setupEventListeners();
-        
-        // Проверяем камеру
-        await this.checkCameraAvailability();
-        
-        console.log('✅ ScannerManager инициализирован');
-        showSuccess('Складской модуль готов к работе', 2000);
-    }
-
-    // ОПТИМИЗАЦИЯ ДЛЯ APK
-    optimizeForAPK() {
-        const isInAPK = !window.location.protocol.startsWith('http');
-        const isWebView = /WebView|Android/.test(navigator.userAgent);
-        
-        if (isInAPK || isWebView) {
-            console.log('📱 APK режим активирован');
-            this.apkMode = true;
-        }
-    }
-
-    // ЗАГРУЗКА КОНТРАГЕНТОВ
-    loadContractors() {
-        console.log('🔍 ScannerManager: Загрузка контрагентов');
-        
-        // Даем время на инициализацию appState
-        if (window.appState && window.appState.getAllContractors) {
-            this.allContractors = window.appState.getAllContractors();
-            console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов из AppState`);
-        } else {
-            console.warn('⚠️ ScannerManager: AppState не доступен, загружаем напрямую из localStorage');
-            this.loadContractorsDirectly();
-        }
-        
-        this._contractorsLoaded = true;
-        this.initContractorSearch();
-    }
-    
-    // Резервный метод загрузки напрямую из localStorage
-    loadContractorsDirectly() {
-        try {
-            const saved = localStorage.getItem('honest_sign_contractors');
-            if (saved) {
-                this.allContractors = JSON.parse(saved);
-                console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов напрямую из localStorage`);
-            } else {
-                this.loadDefaultContractors();
-                this.saveContractorsDirectly();
-            }
-        } catch (error) {
-            console.error('❌ ScannerManager: Ошибка прямой загрузки контрагентов:', error);
-            this.loadDefaultContractors();
-        }
-    }
-
-    // Резервный метод загрузки напрямую из localStorage
-    loadContractorsDirectly() {
-        try {
-            const saved = localStorage.getItem('honest_sign_contractors');
-            if (saved) {
-                this.allContractors = JSON.parse(saved);
-                console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов напрямую из localStorage`);
-            } else {
-                this.loadDefaultContractors();
-                this.saveContractorsDirectly();
-            }
-        } catch (error) {
-            console.error('❌ ScannerManager: Ошибка прямой загрузки контрагентов:', error);
-            this.loadDefaultContractors();
-        }
-    }
-
-    loadDefaultContractors() {
-        this.allContractors = [
-            { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель' },
-            { id: 2, name: 'ИП Иванов', category: 'Розничная сеть' },
-            { id: 3, name: 'ООО "Луч"', category: 'Дилер' },
-            { id: 4, name: 'АО "Вектор"', category: 'Партнер' }
-        ];
-    }
-
-    // Резервный метод сохранения напрямую в localStorage
-    saveContractorsDirectly() {
-        try {
-            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.allContractors));
-            console.log(`✅ ScannerManager: Сохранено ${this.allContractors.length} контрагентов напрямую в localStorage`);
-        } catch (error) {
-            console.error('❌ ScannerManager: Ошибка прямого сохранения контрагентов:', error);
-        }
-    }
-
-    saveContractors() {
-        console.log('💾 ScannerManager: Сохранение контрагентов');
-        
-        if (window.appState && window.appState.saveContractors) {
-            // Обновляем данные в appState перед сохранением
-            if (window.appState.contractors) {
-                window.appState.contractors = this.allContractors;
-            }
-            window.appState.saveContractors();
-            console.log('✅ ScannerManager: Контрагенты сохранены через AppState');
-        } else {
-            console.warn('⚠️ ScannerManager: AppState не доступен, сохраняем напрямую');
-            this.saveContractorsDirectly();
-        }
-    }
-
-    // ПОИСК КОНТРАГЕНТОВ
-    initContractorSearch() {
-        const searchInput = document.getElementById('contractorSearch');
-        if (!searchInput) return;
-
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.trim();
-            this.filterContractors(query);
-        });
-
-        searchInput.addEventListener('focus', () => {
-            this.filterContractors('');
-            this.showDropdown();
-        });
-
-        // Скрытие dropdown при клике вне
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('.contractor-search')) {
-                this.hideDropdown();
-            }
-        });
-    }
-
-    filterContractors(query = '') {
-        const dropdown = document.getElementById('contractorDropdown');
-        if (!dropdown) return;
-
-        let filtered = this.allContractors;
-        
-        if (query) {
-            const terms = query.toLowerCase().split(' ');
-            filtered = this.allContractors.filter(contractor => 
-                terms.some(term => 
-                    contractor.name.toLowerCase().includes(term) ||
-                    contractor.category.toLowerCase().includes(term)
-                )
-            );
-        }
-
-        // Ограничиваем показ
-        filtered = filtered.slice(0, 10);
-
-        if (filtered.length === 0) {
-            dropdown.innerHTML = `
-                <div class="dropdown-item no-results">
-                    <div>🔍 Контрагенты не найдены</div>
-                </div>
-            `;
-        } else {
-            dropdown.innerHTML = filtered.map(contractor => {
-                const isSelected = this.selectedContractors.some(c => c.id === contractor.id);
-                return `
-                    <div class="dropdown-item ${isSelected ? 'selected' : ''}" 
-                         onclick="scannerManager.selectContractor(${contractor.id})">
-                        <div class="contractor-info">
-                            <div class="contractor-name">${contractor.name}</div>
-                            <div class="contractor-category">${contractor.category}</div>
-                        </div>
-                        ${isSelected ? '<div class="selected-badge">✓</div>' : ''}
-                    </div>
-                `;
-            }).join('');
-        }
-
-        this.showDropdown();
-    }
-
-    selectContractor(contractorId) {
-        const contractor = this.allContractors.find(c => c.id === contractorId);
-        if (!contractor) return;
-
-        const isSelected = this.selectedContractors.some(c => c.id === contractorId);
-        
-        if (isSelected) {
-            this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
-            showWarning(`Удален: ${contractor.name}`, 2000);
-        } else {
-            this.selectedContractors.push(contractor);
-            showSuccess(`Добавлен: ${contractor.name}`, 2000);
-        }
-
-        this.updateSelectedContractorsUI();
-        this.updateButtonStates();
-        this.saveSelectedContractors();
-        this.hideDropdown();
-        
-        // Очищаем поле поиска
-        const searchInput = document.getElementById('contractorSearch');
-        if (searchInput) searchInput.value = '';
-    }
-
-    removeContractor(contractorId) {
-        this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
-        this.updateSelectedContractorsUI();
-        this.updateButtonStates();
-        this.saveSelectedContractors();
-    }
-
-    clearContractors() {
-        this.selectedContractors = [];
-        this.updateSelectedContractorsUI();
-        this.updateButtonStates();
-        this.saveSelectedContractors();
-        this.hideDropdown();
-    }
-
-    updateSelectedContractorsUI() {
-        const container = document.getElementById('selectedContractors');
-        const list = document.getElementById('contractorsList');
-        const count = document.getElementById('selectedCount');
-        
-        if (!container || !list) return;
-
-        if (this.selectedContractors.length === 0) {
-            container.classList.add('hidden');
-            if (count) count.textContent = '0';
-            return;
-        }
-
-        container.classList.remove('hidden');
-        if (count) count.textContent = this.selectedContractors.length;
-
-        list.innerHTML = this.selectedContractors.map(contractor => `
-            <div class="contractor-tag">
-                <span class="contractor-name">${contractor.name}</span>
-                <span class="contractor-category">${contractor.category}</span>
-                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeContractor(${contractor.id})">
-                    ✕
-                </button>
-            </div>
-        `).join('');
-    }
-
-    saveSelectedContractors() {
-        try {
-            const data = {
-                contractorIds: this.selectedContractors.map(c => c.id),
-                timestamp: new Date().toISOString()
-            };
-            localStorage.setItem('honest_sign_selected_contractors', JSON.stringify(data));
-        } catch (error) {
-            console.error('❌ Ошибка сохранения выбранных контрагентов:', error);
-        }
-    }
-
-    // УПРАВЛЕНИЕ КОНТРАГЕНТАМИ
-    showContractorManager() {
-        const modal = document.getElementById('contractorManager');
-        if (modal) {
-            modal.classList.remove('hidden');
-            this.loadContractorsManagerList();
-            document.body.style.overflow = 'hidden';
-        }
-    }
-
-    hideContractorManager() {
-        const modal = document.getElementById('contractorManager');
-        if (modal) {
-            modal.classList.add('hidden');
-            document.body.style.overflow = '';
-        }
-    }
-
-    showAddContractorForm() {
-        this.showContractorManager();
-        setTimeout(() => {
-            const addForm = document.getElementById('addContractorForm');
-            const importForm = document.getElementById('importForm');
-            if (addForm) addForm.classList.remove('hidden');
-            if (importForm) importForm.classList.add('hidden');
-        }, 100);
-    }
-
-    showImportForm() {
-        this.showContractorManager();
-        setTimeout(() => {
-            const addForm = document.getElementById('addContractorForm');
-            const importForm = document.getElementById('importForm');
-            if (addForm) addForm.classList.add('hidden');
-            if (importForm) importForm.classList.remove('hidden');
-        }, 100);
-    }
-
-    hideAddContractorForm() {
-        const addForm = document.getElementById('addContractorForm');
-        const importForm = document.getElementById('importForm');
-        if (addForm) addForm.classList.add('hidden');
-        if (importForm) importForm.classList.add('hidden');
-    }
-
-    addContractor() {
-        const nameInput = document.getElementById('contractorName');
-        const categoryInput = document.getElementById('contractorCategory');
-        
-        if (!nameInput || !categoryInput) return;
-
-        const name = nameInput.value.trim();
-        const category = categoryInput.value.trim() || 'Общая категория';
-
-        if (!name) {
-            showError('Введите название контрагента');
-            return;
-        }
-
-        // Проверка дубликатов
-        if (this.allContractors.some(c => c.name.toLowerCase() === name.toLowerCase())) {
-            showError('Контрагент с таким названием уже существует');
-            return;
-        }
-
-        const newId = this.allContractors.length > 0 
-            ? Math.max(...this.allContractors.map(c => c.id)) + 1 
-            : 1;
-
-        const newContractor = { id: newId, name, category };
-        this.allContractors.push(newContractor);
-        this.saveContractors();
-
-        // Обновляем интерфейс
-        nameInput.value = '';
-        categoryInput.value = '';
-        this.hideAddContractorForm();
-        this.loadContractorsManagerList();
-
-        showSuccess(`Контрагент "${name}" добавлен`, 3000);
-    }
-
-    loadContractorsManagerList() {
-        const container = document.getElementById('contractorsManagerList');
-        if (!container) return;
-
-        if (this.allContractors.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">👥</span>
-                    <p>Нет контрагентов</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = this.allContractors.map(contractor => `
-            <div class="contractor-manager-item">
-                <div class="contractor-info">
-                    <div class="contractor-name">${contractor.name}</div>
-                    <div class="contractor-category">${contractor.category}</div>
-                </div>
-                <div class="contractor-actions">
-                    <button class="btn btn-sm btn-outline" onclick="scannerManager.selectContractorInManager(${contractor.id})">
-                        ✅ Выбрать
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="scannerManager.deleteContractor(${contractor.id})">
-                        🗑️ Удалить
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    selectContractorInManager(contractorId) {
-        this.selectContractor(contractorId);
-        this.hideContractorManager();
-    }
-
-    deleteContractor(contractorId) {
-        if (!confirm('Удалить этого контрагента?')) return;
-        
-        this.allContractors = this.allContractors.filter(c => c.id !== contractorId);
-        this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
-        this.saveContractors();
-        this.updateSelectedContractorsUI();
-        this.loadContractorsManagerList();
-        showWarning('Контрагент удален', 3000);
-    }
-
-    // КАМЕРА И СКАНИРОВАНИЕ
-    async checkCameraAvailability() {
-        try {
-            if (!navigator.mediaDevices) {
-                console.warn('⚠️ mediaDevices не поддерживается');
-                return false;
-            }
-
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const cameras = devices.filter(device => device.kind === 'videoinput');
-            console.log(`📸 Найдено камер: ${cameras.length}`);
-            
-            return cameras.length > 0;
-        } catch (error) {
-            console.error('❌ Ошибка проверки камеры:', error);
-            return false;
-        }
-    }
-
-    async startCamera() {
-        if (this.isScanning) {
-            console.log('⚠️ Камера уже запущена');
-            return;
-        }
-
-        if (this.selectedContractors.length === 0) {
-            showError('❌ Сначала выберите контрагентов');
-            return;
-        }
-
-        try {
-            // Останавливаем предыдущую камеру
-            await this.stopCamera();
-
-            // Проверяем библиотеку
-            if (typeof Html5Qrcode === 'undefined') {
-                await this.loadHtml5QrCode();
-            }
-
-            const container = document.getElementById('reader');
-            if (!container) throw new Error('Контейнер не найден');
-
-            // Очищаем контейнер
-            container.innerHTML = '';
-            
-            this.scanner = new Html5Qrcode("reader");
-            
-            const config = {
-                fps: 10,
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
-            };
-
-            await this.scanner.start(
-                { facingMode: "environment" },
-                config,
-                (decodedText) => {
-                    console.log('✅ QR-код распознан:', decodedText);
-                    this.onScanSuccess(decodedText);
-                },
-                (error) => {
-                    // Игнорируем ошибки сканирования
-                    if (!error.includes('NotFoundException')) {
-                        console.log('📷 Ошибка сканирования:', error);
-                    }
-                }
-            );
-
-            this.isScanning = true;
-            this.updateCameraUI();
-            showSuccess('📷 Камера запущена!', 3000);
-
-        } catch (error) {
-            console.error('❌ Ошибка запуска камеры:', error);
-            showError(`Ошибка камеры: ${error.message}`);
-            this.showSimulator();
-        }
-    }
-
-    async stopCamera() {
-        if (this._stopInProgress) return;
-        
-        this._stopInProgress = true;
-
-        try {
-            if (this.scanner) {
-                await this.scanner.stop();
-                this.scanner = null;
-            }
-
-            // Очищаем контейнер
-            const container = document.getElementById('reader');
-            if (container) {
-                container.innerHTML = `
-                    <div class="scanner-overlay">
-                        <span class="placeholder-icon">📷</span>
-                        <p>Камера остановлена</p>
-                        <div class="scanner-frame"></div>
-                    </div>
-                `;
-            }
-
-            this.isScanning = false;
-            this.updateCameraUI();
-            
-        } catch (error) {
-            console.error('❌ Ошибка остановки камеры:', error);
-        } finally {
-            this._stopInProgress = false;
-        }
-    }
-
-    updateCameraUI() {
-        const startBtn = document.getElementById('startCamera');
-        const stopBtn = document.getElementById('stopCamera');
-        
-        if (this.isScanning) {
-            if (startBtn) startBtn.classList.add('hidden');
-            if (stopBtn) stopBtn.classList.remove('hidden');
-        } else {
-            if (startBtn) startBtn.classList.remove('hidden');
-            if (stopBtn) stopBtn.classList.add('hidden');
-        }
-    }
-
-    onScanSuccess(decodedText) {
-        if (this.selectedContractors.length === 0) {
-            showError('❌ Сначала выберите контрагентов');
-            return;
-        }
-
-        // Проверяем дубликаты через appState
-        if (appState && appState.hasCodeBeenScanned(decodedText)) {
-            showWarning('⚠️ Этот код уже отсканирован');
-            return;
-        }
-
-        const scannedCode = {
-            code: decodedText,
-            timestamp: new Date().toISOString(),
-            contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
+        this.contractors = [];
+        this.currentSession = {
+            id: null,
+            contractorIds: [],
+            scannedCodes: [],
+            createdAt: null
         };
         
-        // Сохраняем через appState
-        if (appState) {
-            appState.addScannedCode(decodedText);
+        this.sentSessions = [];
+        this.reports = [];
+        this.reportCounter = 1;
+        
+        this.init();
+    }
+    
+    init() {
+        this.loadContractors();
+        this.loadFromStorage();
+        this.ensureDefaultContractors(); // Теперь этот метод существует
+    }
+    
+    // Гарантируем наличие контрагентов по умолчанию
+    ensureDefaultContractors() {
+        console.log('🔄 AppState: Проверка контрагентов по умолчанию');
+        
+        // Если контрагентов нет вообще - создаем стандартных
+        if (this.contractors.length === 0) {
+            console.log('📝 AppState: Создаем контрагентов по умолчанию');
+            
+            const defaultContractors = [
+                { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель', createdAt: new Date().toISOString() },
+                { id: 2, name: 'ИП Иванов', category: 'Розничная сеть', createdAt: new Date().toISOString() },
+                { id: 3, name: 'ООО "Луч"', category: 'Дилер', createdAt: new Date().toISOString() },
+                { id: 4, name: 'АО "Вектор"', category: 'Партнер', createdAt: new Date().toISOString() }
+            ];
+            
+            this.contractors = defaultContractors;
+            this.saveContractors();
+            console.log('✅ AppState: Созданы контрагенты по умолчанию');
+        } else {
+            console.log(`✅ AppState: Уже есть ${this.contractors.length} контрагентов`);
         }
-        
-        this.addCodeToList(scannedCode);
-        this.updateUI();
-        
-        showSuccess(`✅ Код добавлен`, 2000);
     }
 
-    addCodeToList(scannedCode) {
-        const codesList = document.getElementById('codesList');
-        const emptyState = codesList.querySelector('.empty-state');
+    // ОСНОВНОЙ МЕТОД ЗАГРУЗКИ КОНТРАГЕНТОВ
+    loadContractors() {
+        console.log('🔍 AppState: Загрузка контрагентов из хранилища');
         
-        if (emptyState) {
-            emptyState.remove();
+        try {
+            const savedContractors = localStorage.getItem('honest_sign_contractors');
+            
+            if (savedContractors) {
+                this.contractors = JSON.parse(savedContractors);
+                console.log(`✅ AppState: Загружено ${this.contractors.length} контрагентов из localStorage`);
+            } else {
+                console.log('ℹ️ AppState: Нет сохраненных контрагентов');
+            }
+        } catch (error) {
+            console.error('❌ AppState: Ошибка загрузки контрагентов:', error);
+            this.contractors = [];
+        }
+    }
+
+    // ОСНОВНОЙ МЕТОД СОХРАНЕНИЯ КОНТРАГЕНТОВ
+    saveContractors() {
+        console.log('💾 AppState: Сохранение контрагентов в хранилище');
+        console.log('📊 Данные для сохранения:', this.contractors);
+        
+        try {
+            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.contractors));
+            
+            // Проверяем сохранение
+            const saved = localStorage.getItem('honest_sign_contractors');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                console.log(`✅ AppState: Сохранено ${parsed.length} контрагентов`);
+                console.log('🔍 Проверка:', parsed.length === this.contractors.length ? '✅ Данные совпадают' : '❌ Данные не совпадают');
+            } else {
+                console.error('❌ AppState: Данные не сохранились в localStorage');
+            }
+            
+        } catch (error) {
+            console.error('❌ AppState: Критическая ошибка сохранения контрагентов:', error);
+        }
+    }
+
+    // Контрагенты - геттеры
+    getContractors() {
+        return this.contractors;
+    }
+
+    getContractor(id) {
+        return this.contractors.find(c => c.id === id);
+    }
+
+    getAllContractors() {
+        return this.contractors;
+    }
+
+    // Добавление контрагента
+    addContractor(name, category = 'Партнер') {
+        console.log(`👤 AppState: Добавление контрагента "${name}"`);
+        
+        const newContractor = {
+            id: this.generateContractorId(),
+            name: name,
+            category: category,
+            createdAt: new Date().toISOString()
+        };
+    
+        this.contractors.push(newContractor);
+        this.saveContractors();
+        return newContractor;
+    }
+
+    updateContractor(id, name, category) {
+        const contractor = this.contractors.find(c => c.id === id);
+        if (contractor) {
+            contractor.name = name;
+            contractor.category = category;
+            this.saveContractors();
+            return true;
+        }
+        return false;
+    }
+
+    deleteContractor(id) {
+        this.contractors = this.contractors.filter(c => c.id !== id);
+        this.saveContractors();
+        return true;
+    }
+
+    generateContractorId() {
+        const maxId = this.contractors.reduce((max, c) => Math.max(max, c.id), 0);
+        return maxId + 1;
+    }
+
+    // Импорт/экспорт
+    exportContractorsToCSV() {
+        const headers = ['ID', 'Название', 'Категория', 'Дата создания'];
+        const rows = this.contractors.map(c => [
+            c.id,
+            `"${c.name}"`,
+            `"${c.category}"`,
+            c.createdAt
+        ]);
+    
+        const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+        return csv;
+    }
+
+    importContractorsFromCSV(csvData) {
+        console.log('📥 AppState: Импорт контрагентов из CSV');
+        
+        try {
+            const lines = csvData.split('\n').filter(line => line.trim());
+            
+            if (lines.length === 0) {
+                throw new Error('Файл пустой');
+            }
+            
+            let importedCount = 0;
+            let skippedCount = 0;
+            
+            console.log(`📊 Найдено строк в CSV: ${lines.length}`);
+            
+            // Обрабатываем каждую строку
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                
+                // Пропускаем пустые строки и заголовки
+                if (!line || this.isHeaderLine(line)) {
+                    console.log(`⏭️ Пропускаем строку ${i + 1}: "${line}"`);
+                    skippedCount++;
+                    continue;
+                }
+                
+                const cells = this.parseCSVLine(line);
+                console.log(`📝 Обработка строки ${i + 1}:`, cells);
+                
+                if (cells.length >= 1) {
+                    const name = cells[0].replace(/"/g, '').trim();
+                    const category = cells[1] ? cells[1].replace(/"/g, '').trim() : 'Импортированные';
+                    
+                    if (name) {
+                        // Проверяем дубликаты
+                        const exists = this.contractors.some(c => 
+                            c.name.toLowerCase() === name.toLowerCase()
+                        );
+                        
+                        if (!exists) {
+                            const contractor = this.addContractor(name, category);
+                            importedCount++;
+                            console.log(`✅ Добавлен: ${name}`);
+                        } else {
+                            skippedCount++;
+                            console.log(`⏭️ Дубликат: ${name}`);
+                        }
+                    } else {
+                        skippedCount++;
+                        console.log(`⏭️ Пустое название в строке ${i + 1}`);
+                    }
+                } else {
+                    skippedCount++;
+                    console.log(`⏭️ Недостаточно данных в строке ${i + 1}`);
+                }
+            }
+            
+            console.log(`📊 Итоги импорта: добавлено ${importedCount}, пропущено ${skippedCount}`);
+            
+            if (importedCount > 0) {
+                showSuccess(`Импортировано ${importedCount} контрагентов`, 5000);
+            } else {
+                showWarning('Не найдено новых контрагентов для импорта', 5000);
+            }
+            
+            return importedCount;
+            
+        } catch (error) {
+            console.error('❌ Ошибка импорта:', error);
+            showError(`Ошибка импорта: ${error.message}`);
+            throw error;
+        }
+    }
+    
+    // Вспомогательный метод для определения заголовков
+    isHeaderLine(line) {
+        const headerPatterns = [
+            /название/i, /name/i, /контрагент/i, /организация/i,
+            /категория/i, /category/i, /id/i, /№/i
+        ];
+        
+        return headerPatterns.some(pattern => pattern.test(line));
+    }
+
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
         }
         
-        const codeItem = document.createElement('div');
-        codeItem.className = 'code-item';
-        codeItem.innerHTML = `
-            <div class="code-info">
-                <div class="code-value">${this.formatCode(scannedCode.code)}</div>
-                <div class="code-time">${new Date(scannedCode.timestamp).toLocaleTimeString()}</div>
-            </div>
-            <div class="code-actions">
-                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeCode('${scannedCode.code}')">
-                    ✕ Удалить
+        result.push(current);
+        return result;
+    }
+
+    // Текущая сессия
+    startNewSession(contractorIds) {
+        this.currentSession = {
+            id: this.generateId(),
+            contractorIds: Array.isArray(contractorIds) ? contractorIds : [contractorIds],
+            scannedCodes: [],
+            createdAt: new Date().toISOString()
+        };
+        this.saveToStorage();
+    }
+
+    getCurrentSession() {
+        return this.currentSession;
+    }
+
+    clearCurrentSession() {
+        this.currentSession = {
+            id: null,
+            contractorIds: [],
+            scannedCodes: [],
+            createdAt: null
+        };
+        this.saveToStorage();
+    }
+
+    // Работа с кодами
+    addScannedCode(code) {
+        const scannedCode = {
+            code: code,
+            timestamp: new Date().toISOString()
+        };
+        
+        this.currentSession.scannedCodes.push(scannedCode);
+        this.saveToStorage();
+        
+        return scannedCode;
+    }
+
+    removeScannedCode(code) {
+        this.currentSession.scannedCodes = this.currentSession.scannedCodes.filter(
+            scannedCode => scannedCode.code !== code
+        );
+        this.saveToStorage();
+    }
+
+    hasCodeBeenScanned(code) {
+        return this.currentSession.scannedCodes.some(
+            scannedCode => scannedCode.code === code
+        );
+    }
+
+    // Отчеты
+    saveReport(report) {
+        console.log('💾 AppState: Сохранение отчета');
+
+        // Добавляем порядковый номер
+        report.sequentialNumber = this.reportCounter++;
+        report.submittedAt = new Date().toISOString();
+
+        console.log('🔢 Назначен номер:', report.sequentialNumber);
+        console.log('👥 Контрагенты в отчете:', report.contractors);
+        
+        this.reports.unshift(report);
+        this.saveReports(this.reports);
+        
+        // Очищаем текущую сессию после сохранения отчета
+        this.clearCurrentSession();
+        
+        // Сохраняем счетчик в localStorage
+        this.saveToStorage();
+
+        console.log('✅ Отчет сохранен');
+    }
+
+    getReports() {
+        return this.reports;
+    }
+
+    getAllReports() {
+        return this.reports;
+    }
+
+    saveReports(reports) {
+        this.reports = reports;
+        localStorage.setItem('honest_sign_reports', JSON.stringify(reports));
+    }
+
+    // Отправка сессий
+    sendCurrentSession() {
+        if (this.currentSession.scannedCodes.length === 0) {
+            return false;
+        }
+
+        this.sentSessions.unshift({
+            ...this.currentSession,
+            sentAt: new Date().toISOString()
+        });
+
+        this.saveToStorage();
+        return true;
+    }
+
+    // Вспомогательные методы
+    generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+    // Сохранение/загрузка
+    saveToStorage() {
+        localStorage.setItem('honest_sign_current_session', JSON.stringify(this.currentSession));
+        localStorage.setItem('honest_sign_sent_sessions', JSON.stringify(this.sentSessions));
+        localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
+        localStorage.setItem('honest_sign_report_counter', this.reportCounter.toString());
+        
+        // Сохраняем выбранных контрагентов отдельно
+        const selectedContractorsData = {
+            contractorIds: this.currentSession.contractorIds || [],
+            timestamp: new Date().toISOString()
+        };
+        localStorage.setItem('honest_sign_selected_contractors', JSON.stringify(selectedContractorsData));
+    }
+
+    loadFromStorage() {
+        try {
+            const savedSession = localStorage.getItem('honest_sign_current_session');
+            const savedSentSessions = localStorage.getItem('honest_sign_sent_sessions');
+            const savedReports = localStorage.getItem('honest_sign_reports');
+            const savedCounter = localStorage.getItem('honest_sign_report_counter');
+
+            if (savedSession) {
+                this.currentSession = JSON.parse(savedSession);
+            }
+            
+            if (savedSentSessions) {
+                this.sentSessions = JSON.parse(savedSentSessions);
+            }
+            
+            if (savedReports) {
+                this.reports = JSON.parse(savedReports);
+            }
+            
+            if (savedCounter) {
+                this.reportCounter = parseInt(savedCounter);
+            }
+        } catch (error) {
+            console.error('Ошибка загрузки из localStorage:', error);
+        }
+    }
+
+    // СИНХРОНИЗАЦИЯ ДАННЫХ МЕЖДУ УСТРОЙСТВАМИ
+    syncWithCloud() {
+        console.log('☁️ AppState: Синхронизация с облаком');
+        
+        // Проверяем наличие облачного API
+        if (typeof CloudSync !== 'undefined' && CloudSync.isAvailable()) {
+            return this.syncWithCloudAPI();
+        } 
+        // Проверяем наличие Firebase
+        else if (typeof firebase !== 'undefined') {
+            return this.syncWithFirebase();
+        }
+        // Базовый обмен через QR-код
+        else {
+            return this.syncWithQRCode();
+        }
+    }
+
+    // Базовый обмен данными через QR-код
+    syncWithQRCode() {
+        console.log('📱 AppState: Синхронизация через QR-код');
+        
+        const syncData = {
+            contractors: this.contractors,
+            timestamp: new Date().toISOString(),
+            device: navigator.userAgent.substring(0, 50)
+        };
+        
+        const jsonData = JSON.stringify(syncData);
+        
+        // Показываем QR-код для экспорта
+        this.showExportQRCode(jsonData);
+        
+        return new Promise((resolve) => {
+            // Здесь будет логика сканирования QR-кода для импорта
+            console.log('✅ Данные готовы для экспорта через QR-код');
+            resolve(true);
+        });
+    }
+
+    showExportQRCode(data) {
+        // Создаем модальное окно с QR-кодом
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 10000;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center;">
+                <h3>📱 Синхронизация данных</h3>
+                <p>Отсканируйте этот QR-код на другом устройстве:</p>
+                <div id="qrcodeContainer"></div>
+                <button onclick="this.closest('.sync-modal').remove()" 
+                        style="margin-top: 15px; padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
+                    Закрыть
                 </button>
             </div>
         `;
         
-        codesList.appendChild(codeItem);
-    }
-
-    formatCode(code) {
-        return code.length > 25 
-            ? code.substring(0, 15) + '...' + code.substring(code.length - 10)
-            : code;
-    }
-
-    removeCode(code) {
-        if (appState) {
-            appState.removeScannedCode(code);
-        }
-        this.updateUI();
-        showWarning('Код удален', 2000);
-    }
-
-    // СИМУЛЯТОР
-    showSimulator() {
-        const simulator = document.getElementById('simulator');
-        if (simulator) {
-            simulator.classList.remove('hidden');
-        }
-    }
-
-    hideSimulator() {
-        const simulator = document.getElementById('simulator');
-        if (simulator) {
-            simulator.classList.add('hidden');
-        }
-    }
-
-    simulateScan(code) {
-        console.log('🧪 Симуляция сканирования:', code);
-        this.onScanSuccess(code);
-    }
-
-    // ОТЧЕТЫ
-    generateReport() {
-        if (!appState) {
-            showError('❌ AppState не доступен');
-            return;
-        }
-
-        const session = appState.getCurrentSession();
+        modal.className = 'sync-modal';
+        document.body.appendChild(modal);
         
-        if (session.scannedCodes.length === 0) {
-            showError('❌ Нет кодов для отчета');
-            return;
-        }
-
-        if (this.selectedContractors.length === 0) {
-            showError('❌ Нет выбранных контрагентов');
-            return;
-        }
-
-        const report = {
-            id: Date.now(),
-            contractorName: this.selectedContractors.map(c => c.name).join(', '),
-            contractors: [...this.selectedContractors],
-            codes: [...session.scannedCodes],
-            createdAt: new Date().toISOString(),
-            status: 'pending'
-        };
-
-        appState.saveReport(report);
-        showSuccess(`✅ Отчет создан! Кодов: ${session.scannedCodes.length}`, 5000);
-        
-        // Очищаем сессию
-        this.clearSession();
-        
-        // Обновляем список отчетов
-        this.loadReportsList();
-    }
-
-    clearSession() {
-        this.stopCamera();
-        if (appState) {
-            appState.clearCurrentSession();
-        }
-        this.selectedContractors = [];
-        this.updateSelectedContractorsUI();
-        this.updateUI();
-        showWarning('🗑️ Сессия очищена', 3000);
-    }
-
-    loadReportsList() {
-        if (!appState) return;
-        
-        const reports = appState.getAllReports();
-        const container = document.getElementById('reportsList');
-        
-        if (!container) return;
-
-        if (reports.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">📄</span>
-                    <p>Нет отчетов</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = reports.map(report => `
-            <div class="report-item">
-                <div class="report-info">
-                    <div class="report-header">
-                        <strong>${report.contractorName}</strong>
-                        <span class="report-status ${report.status}">${report.status}</span>
-                    </div>
-                    <div class="report-details">
-                        <span>Кодов: ${report.codes.length}</span>
-                        <span>${new Date(report.createdAt).toLocaleString()}</span>
-                    </div>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    updateUI() {
-        if (!appState) return;
-        
-        const session = appState.getCurrentSession();
-        const codesCount = session.scannedCodes.length;
-        
-        const totalCodes = document.getElementById('totalCodes');
-        const codesCountElement = document.getElementById('codesCount');
-        
-        if (totalCodes) totalCodes.textContent = codesCount;
-        if (codesCountElement) codesCountElement.textContent = codesCount;
-        
-        this.updateButtonStates();
-        this.updateCodesList();
-    }
-
-    updateButtonStates() {
-        const hasContractors = this.selectedContractors.length > 0;
-        const hasCodes = appState && appState.getCurrentSession().scannedCodes.length > 0;
-        
-        const startCamera = document.getElementById('startCamera');
-        const generateReport = document.getElementById('generateReport');
-        
-        if (startCamera) startCamera.disabled = !hasContractors;
-        if (generateReport) generateReport.disabled = !hasContractors || !hasCodes;
-    }
-
-    updateCodesList() {
-        if (!appState) return;
-        
-        const codesList = document.getElementById('codesList');
-        const codes = appState.getCurrentSession().scannedCodes;
-        
-        if (codes.length === 0) {
-            codesList.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">📦</span>
-                    <p>Нет отсканированных кодов</p>
-                </div>
-            `;
-        }
-    }
-
-    checkExistingSession() {
-        try {
-            console.log('🔄 ScannerManager: Восстановление сессии...');
-            
-            // Восстанавливаем выбранных контрагентов
-            const saved = JSON.parse(localStorage.getItem('honest_sign_selected_contractors') || '{}');
-            console.log('- Сохраненные выбранные контрагенты:', saved);
-            
-            if (saved.contractorIds && Array.isArray(saved.contractorIds)) {
-                this.selectedContractors = saved.contractorIds.map(id => 
-                    this.allContractors.find(c => c.id === id)
-                ).filter(c => c);
-                
-                console.log('- Восстановлено контрагентов:', this.selectedContractors.length);
-            }
-    
-            // Восстанавливаем отсканированные коды через appState если доступен
-            if (window.appState && window.appState.getCurrentSession) {
-                const session = window.appState.getCurrentSession();
-                if (session.scannedCodes.length > 0) {
-                    session.scannedCodes.forEach(code => this.addCodeToList(code));
-                    this.updateUI();
-                }
-            }
-    
-            this.updateSelectedContractorsUI();
-            this.updateButtonStates();
-            this.updateUI();
-            
-            console.log('✅ ScannerManager: Сессия восстановлена');
-            
-        } catch (error) {
-            console.error('❌ ScannerManager: Ошибка восстановления сессии:', error);
-            this.selectedContractors = [];
-        }
-    }
-
-    showDropdown() {
-        const dropdown = document.getElementById('contractorDropdown');
-        if (dropdown) {
-            dropdown.classList.remove('hidden');
-        }
-    }
-
-    hideDropdown() {
-        const dropdown = document.getElementById('contractorDropdown');
-        if (dropdown) {
-            dropdown.classList.add('hidden');
-        }
-    }
-
-    async loadHtml5QrCode() {
-        return new Promise((resolve, reject) => {
-            if (typeof Html5Qrcode !== 'undefined') {
-                resolve();
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/html5-qrcode';
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error('Не удалось загрузить библиотеку сканирования'));
-            document.head.appendChild(script);
-        });
-    }
-
-    // ОБРАБОТЧИКИ СОБЫТИЙ
-    setupEventListeners() {
-        console.log('🔧 Настройка обработчиков событий');
-        
-        // Основные кнопки
-        this.setupButton('startCamera', 'startCamera');
-        this.setupButton('stopCamera', 'stopCamera');
-        this.setupButton('showSimulator', 'showSimulator');
-        this.setupButton('generateReport', 'generateReport');
-        this.setupButton('clearSession', 'clearSession');
-        
-        // Управление контрагентами
-        this.setupButton('addManualContractorBtn', 'showAddContractorForm');
-        this.setupButton('importContractorsBtn', 'showImportForm');
-        
-        // Модальные окна
-        this.setupButton('hideContractorManager', 'hideContractorManager');
-        this.setupButton('hideAddContractorForm', 'hideAddContractorForm');
-        this.setupButton('clearContractors', 'clearContractors');
-        this.setupButton('addContractor', 'addContractor');
-
-        // Тестовые коды
-        document.addEventListener('click', (e) => {
-            if (e.target.closest('.test-code')) {
-                const testCode = e.target.closest('.test-code');
-                const code = testCode.getAttribute('data-scan');
-                if (code) {
-                    e.preventDefault();
-                    this.simulateScan(code);
-                }
-            }
-        });
-
-        // Закрытие модальных окон
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'contractorManager') {
-                this.hideContractorManager();
-            }
-        });
-    }
-
-    setupButton(elementId, methodName) {
-        const element = document.getElementById(elementId);
-        if (element && this[methodName]) {
-            element.addEventListener('click', (e) => {
-                e.preventDefault();
-                this[methodName]();
+        // Генерируем QR-код (нужна библиотека QRCode.js)
+        if (typeof QRCode !== 'undefined') {
+            new QRCode(document.getElementById('qrcodeContainer'), {
+                text: data,
+                width: 200,
+                height: 200
             });
         }
     }
 
-    // СИНХРОНИЗАЦИЯ ДАННЫХ
-    exportData() {
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        const exportData = window.appState.exportForSync();
-        
-        // Создаем файл для скачивания
-        const blob = new Blob([exportData], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `contractors-backup-${new Date().toISOString().split('T')[0]}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        showSuccess('Данные экспортированы в файл', 3000);
-    }
-
-    importData() {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.json,.csv';
-        
-        input.onchange = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const content = e.target.result;
-                
-                if (file.name.endsWith('.json')) {
-                    // Импорт JSON
-                    if (window.appState && window.appState.manualImport) {
-                        window.appState.manualImport(content);
-                    }
-                } else if (file.name.endsWith('.csv')) {
-                    // Импорт CSV
-                    if (window.appState && window.appState.importContractorsFromCSV) {
-                        window.appState.importContractorsFromCSV(content);
-                    }
-                }
-            };
-            reader.readAsText(file);
-        };
-        
-        input.click();
-    }
-
-    showQRCode() {
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        window.appState.syncWithQRCode();
-    }
-
-    scanQRCode() {
-        showInfo('Для сканирования QR-кода используйте основную камеру сканирования', 5000);
-        this.startCamera();
-    }
-
-    // Обработка сканированных QR-кодов синхронизации
-    handleSyncQRCode(decodedText) {
+    // Импорт данных из QR-кода
+    importFromQRCode(jsonData) {
         try {
-            // Проверяем, это ли данные синхронизации
-            const data = JSON.parse(decodedText);
+            const data = JSON.parse(jsonData);
             
-            if (data.contractors && data.timestamp) {
-                if (confirm(`Импортировать ${data.contractors.length} контрагентов?`)) {
-                    if (window.appState && window.appState.importFromQRCode) {
-                        window.appState.importFromQRCode(decodedText);
-                        this.loadContractors(); // Перезагружаем контрагентов
-                        this.loadContractorsManagerList(); // Обновляем список
+            if (data.contractors && Array.isArray(data.contractors)) {
+                console.log(`📥 Импорт ${data.contractors.length} контрагентов`);
+                
+                let importedCount = 0;
+                
+                data.contractors.forEach(contractor => {
+                    // Проверяем дубликаты по ID и имени
+                    const existsById = this.contractors.some(c => c.id === contractor.id);
+                    const existsByName = this.contractors.some(c => c.name === contractor.name);
+                    
+                    if (!existsById && !existsByName) {
+                        this.contractors.push(contractor);
+                        importedCount++;
                     }
-                }
+                });
+                
+                this.saveContractors();
+                showSuccess(`Импортировано ${importedCount} контрагентов`, 5000);
                 return true;
             }
         } catch (error) {
-            // Не JSON данные, значит обычный QR-код
-            console.log('Обычный QR-код, не данные синхронизации');
-            return false;
+            console.error('❌ Ошибка импорта из QR-кода:', error);
+            showError('Ошибка импорта данных');
         }
-        
         return false;
     }
 
-    // Обновите метод onScanSuccess для обработки синхронизации
-    onScanSuccess(decodedText) {
-        // Сначала проверяем, это ли данные синхронизации
-        if (this.handleSyncQRCode(decodedText)) {
-            return;
-        }
-        
-        // Обычное сканирование кодов...
-        if (this.selectedContractors.length === 0) {
-            showError('❌ Сначала выберите контрагентов');
-            return;
-        }
-
-        if (appState && appState.hasCodeBeenScanned(decodedText)) {
-            showWarning('⚠️ Этот код уже отсканирован');
-            return;
-        }
-
-        const scannedCode = {
-            code: decodedText,
+    // Экспорт данных для синхронизации
+    exportForSync() {
+        const exportData = {
+            contractors: this.contractors,
             timestamp: new Date().toISOString(),
-            contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
+            version: '1.0'
         };
         
-        if (appState) {
-            appState.addScannedCode(decodedText);
-        }
-        
-        this.addCodeToList(scannedCode);
-        this.updateUI();
-        
-        showSuccess(`✅ Код добавлен`, 2000);
+        return JSON.stringify(exportData, null, 2);
     }
 
+    // Ручной импорт данных
+    manualImport(jsonData) {
+        return this.importFromQRCode(jsonData);
+    }
 }
 
-// ИНИЦИАЛИЗАЦИЯ
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 DOM загружен');
-    
-    if (typeof ScannerManager !== 'undefined' && !window.scannerManager) {
-        window.scannerManager = new ScannerManager();
-    }
-});
+// Глобальный экземпляр
+const appState = new AppState();
