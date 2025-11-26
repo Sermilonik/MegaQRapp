@@ -16,38 +16,50 @@ class AppState {
     }
     
     init() {
+        this.loadContractors(); // ИСПРАВЛЕНО: загружаем контрагентов первым делом
         this.loadFromStorage();
         this.ensureDefaultContractors();
     }
-    
-    // Гарантируем наличие контрагентов по умолчанию
-    ensureDefaultContractors() {
-        const defaultContractors = [
-            { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель', createdAt: new Date().toISOString() },
-            { id: 2, name: 'ИП Иванов', category: 'Розничная сеть', createdAt: new Date().toISOString() },
-            { id: 3, name: 'ООО "Луч"', category: 'Дилер', createdAt: new Date().toISOString() },
-            { id: 4, name: 'АО "Вектор"', category: 'Партнер', createdAt: new Date().toISOString() }
-        ];
+
+    // ОСНОВНОЙ МЕТОД ЗАГРУЗКИ КОНТРАГЕНТОВ
+    loadContractors() {
+        console.log('🔍 AppState: Загрузка контрагентов из хранилища');
         
-        const existingContractors = this.getContractors();
-        
-        if (existingContractors.length === 0) {
-            this.contractors = defaultContractors;
-            this.saveContractors();
-            console.log('✅ Загружены контрагенты по умолчанию');
+        try {
+            const savedContractors = localStorage.getItem('honest_sign_contractors');
+            
+            if (savedContractors) {
+                this.contractors = JSON.parse(savedContractors);
+                console.log(`✅ AppState: Загружено ${this.contractors.length} контрагентов из localStorage`);
+            } else {
+                console.log('ℹ️ AppState: Нет сохраненных контрагентов, будут созданы стандартные');
+            }
+        } catch (error) {
+            console.error('❌ AppState: Ошибка загрузки контрагентов:', error);
+            this.contractors = [];
         }
     }
 
-    // Метод загрузки контрагентов
-    loadContractorsFromStorage() {
+    // ОСНОВНОЙ МЕТОД СОХРАНЕНИЯ КОНТРАГЕНТОВ
+    saveContractors() {
+        console.log('💾 AppState: Сохранение контрагентов в хранилище');
+        console.log('📊 Данные для сохранения:', this.contractors);
+        
         try {
-            const savedContractors = localStorage.getItem('honest_sign_contractors');
-            if (savedContractors) {
-                this.contractors = JSON.parse(savedContractors);
-                console.log('✅ Contractors loaded from storage:', this.contractors);
+            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.contractors));
+            
+            // Проверяем сохранение
+            const saved = localStorage.getItem('honest_sign_contractors');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                console.log(`✅ AppState: Сохранено ${parsed.length} контрагентов`);
+                console.log('🔍 Проверка:', parsed.length === this.contractors.length ? '✅ Данные совпадают' : '❌ Данные не совпадают');
+            } else {
+                console.error('❌ AppState: Данные не сохранились в localStorage');
             }
+            
         } catch (error) {
-            console.error('❌ Error loading contractors from storage:', error);
+            console.error('❌ AppState: Критическая ошибка сохранения контрагентов:', error);
         }
     }
 
@@ -130,8 +142,14 @@ class AppState {
         return this.contractors.find(c => c.id === id);
     }
 
-    // Контрагенты
+    getAllContractors() {
+        return this.contractors;
+    }
+
+    // Добавление контрагента
     addContractor(name, category = 'Партнер') {
+        console.log(`👤 AppState: Добавление контрагента "${name}"`);
+        
         const newContractor = {
             id: this.generateContractorId(),
             name: name,
@@ -140,7 +158,7 @@ class AppState {
         };
     
         this.contractors.push(newContractor);
-        this.saveContractors();
+        this.saveContractors(); // СОХРАНЯЕМ сразу после добавления
         return newContractor;
     }
 
@@ -149,7 +167,7 @@ class AppState {
         if (contractor) {
             contractor.name = name;
             contractor.category = category;
-            this.saveContractors();
+            this.saveContractors(); // СОХРАНЯЕМ после изменения
             return true;
         }
         return false;
@@ -157,19 +175,13 @@ class AppState {
 
     deleteContractor(id) {
         this.contractors = this.contractors.filter(c => c.id !== id);
-        this.saveContractors();
+        this.saveContractors(); // СОХРАНЯЕМ после удаления
         return true;
     }
 
     generateContractorId() {
-        // Генерируем ID больше максимального существующего
         const maxId = this.contractors.reduce((max, c) => Math.max(max, c.id), 0);
         return maxId + 1;
-    }
-
-    saveContractors() {
-        localStorage.setItem('honest_sign_contractors', JSON.stringify(this.contractors));
-        console.log('💾 Contractors saved to storage:', this.contractors);
     }
 
     // Импорт/экспорт
@@ -191,7 +203,7 @@ class AppState {
             const lines = csvData.split('\n').filter(line => line.trim());
             const imported = [];
         
-            for (let i = 1; i < lines.length; i++) { // Пропускаем заголовок
+            for (let i = 1; i < lines.length; i++) {
                 const cells = this.parseCSVLine(lines[i]);
                 if (cells.length >= 2) {
                     const name = cells[0].replace(/"/g, '').trim();
@@ -210,34 +222,34 @@ class AppState {
             throw new Error('Ошибка импорта данных');
         }
     }
-
-parseCSVLine(line) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
     
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
         
-        if (char === '"') {
-            inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-            result.push(current);
-            current = '';
-        } else {
-            current += char;
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
         }
+        
+        result.push(current);
+        return result;
     }
-    
-    result.push(current);
-    return result;
-}
 
     // Текущая сессия
-    startNewSession(contractorId) {
+    startNewSession(contractorIds) {
         this.currentSession = {
             id: this.generateId(),
-            contractorId: contractorId,
+            contractorIds: Array.isArray(contractorIds) ? contractorIds : [contractorIds],
             scannedCodes: [],
             createdAt: new Date().toISOString()
         };
@@ -251,7 +263,7 @@ parseCSVLine(line) {
     clearCurrentSession() {
         this.currentSession = {
             id: null,
-            contractorId: null,
+            contractorIds: [],
             scannedCodes: [],
             createdAt: null
         };
@@ -286,14 +298,32 @@ parseCSVLine(line) {
 
     // Отчеты
     saveReport(report) {
+        console.log('💾 AppState: Сохранение отчета');
+
+        // Добавляем порядковый номер
+        report.sequentialNumber = this.reportCounter++;
+        report.submittedAt = new Date().toISOString();
+
+        console.log('🔢 Назначен номер:', report.sequentialNumber);
+        console.log('👥 Контрагенты в отчете:', report.contractors);
+        
         this.reports.unshift(report);
         this.saveReports(this.reports);
         
         // Очищаем текущую сессию после сохранения отчета
         this.clearCurrentSession();
+        
+        // Сохраняем счетчик в localStorage
+        this.saveToStorage();
+
+        console.log('✅ Отчет сохранен');
     }
 
     getReports() {
+        return this.reports;
+    }
+
+    getAllReports() {
         return this.reports;
     }
 
@@ -327,8 +357,9 @@ parseCSVLine(line) {
         localStorage.setItem('honest_sign_current_session', JSON.stringify(this.currentSession));
         localStorage.setItem('honest_sign_sent_sessions', JSON.stringify(this.sentSessions));
         localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
+        localStorage.setItem('honest_sign_report_counter', this.reportCounter.toString());
         
-        // ДОБАВИМ: сохраняем выбранных контрагентов отдельно
+        //Сохраняем выбранных контрагентов отдельно
         const selectedContractorsData = {
             contractorIds: this.currentSession.contractorIds || [],
             timestamp: new Date().toISOString()
@@ -341,6 +372,7 @@ parseCSVLine(line) {
             const savedSession = localStorage.getItem('honest_sign_current_session');
             const savedSentSessions = localStorage.getItem('honest_sign_sent_sessions');
             const savedReports = localStorage.getItem('honest_sign_reports');
+            const savedCounter = localStorage.getItem('honest_sign_report_counter');
 
             if (savedSession) {
                 this.currentSession = JSON.parse(savedSession);
@@ -352,6 +384,10 @@ parseCSVLine(line) {
             
             if (savedReports) {
                 this.reports = JSON.parse(savedReports);
+            }
+            
+            if (savedCounter) {
+                this.reportCounter = parseInt(savedCounter);
             }
         } catch (error) {
             console.error('Ошибка загрузки из localStorage:', error);
