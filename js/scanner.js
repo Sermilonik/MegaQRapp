@@ -62,17 +62,51 @@ class ScannerManager {
     loadContractors() {
         console.log('🔍 ScannerManager: Загрузка контрагентов');
         
-        // ВСЕГДА загружаем из AppState
+        // Даем время на инициализацию appState
         if (window.appState && window.appState.getAllContractors) {
             this.allContractors = window.appState.getAllContractors();
             console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов из AppState`);
         } else {
-            console.error('❌ ScannerManager: AppState не доступен');
-            this.loadDefaultContractors();
+            console.warn('⚠️ ScannerManager: AppState не доступен, загружаем напрямую из localStorage');
+            this.loadContractorsDirectly();
         }
         
         this._contractorsLoaded = true;
         this.initContractorSearch();
+    }
+    
+    // Резервный метод загрузки напрямую из localStorage
+    loadContractorsDirectly() {
+        try {
+            const saved = localStorage.getItem('honest_sign_contractors');
+            if (saved) {
+                this.allContractors = JSON.parse(saved);
+                console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов напрямую из localStorage`);
+            } else {
+                this.loadDefaultContractors();
+                this.saveContractorsDirectly();
+            }
+        } catch (error) {
+            console.error('❌ ScannerManager: Ошибка прямой загрузки контрагентов:', error);
+            this.loadDefaultContractors();
+        }
+    }
+
+    // Резервный метод загрузки напрямую из localStorage
+    loadContractorsDirectly() {
+        try {
+            const saved = localStorage.getItem('honest_sign_contractors');
+            if (saved) {
+                this.allContractors = JSON.parse(saved);
+                console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов напрямую из localStorage`);
+            } else {
+                this.loadDefaultContractors();
+                this.saveContractorsDirectly();
+            }
+        } catch (error) {
+            console.error('❌ ScannerManager: Ошибка прямой загрузки контрагентов:', error);
+            this.loadDefaultContractors();
+        }
     }
 
     loadDefaultContractors() {
@@ -84,15 +118,29 @@ class ScannerManager {
         ];
     }
 
+    // Резервный метод сохранения напрямую в localStorage
+    saveContractorsDirectly() {
+        try {
+            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.allContractors));
+            console.log(`✅ ScannerManager: Сохранено ${this.allContractors.length} контрагентов напрямую в localStorage`);
+        } catch (error) {
+            console.error('❌ ScannerManager: Ошибка прямого сохранения контрагентов:', error);
+        }
+    }
+
     saveContractors() {
-        console.log('💾 ScannerManager: Сохранение контрагентов через AppState');
+        console.log('💾 ScannerManager: Сохранение контрагентов');
         
-        // ВСЕГДА сохраняем через AppState
         if (window.appState && window.appState.saveContractors) {
+            // Обновляем данные в appState перед сохранением
+            if (window.appState.contractors) {
+                window.appState.contractors = this.allContractors;
+            }
             window.appState.saveContractors();
             console.log('✅ ScannerManager: Контрагенты сохранены через AppState');
         } else {
-            console.error('❌ ScannerManager: AppState не доступен для сохранения');
+            console.warn('⚠️ ScannerManager: AppState не доступен, сохраняем напрямую');
+            this.saveContractorsDirectly();
         }
     }
 
@@ -713,29 +761,37 @@ class ScannerManager {
 
     checkExistingSession() {
         try {
+            console.log('🔄 ScannerManager: Восстановление сессии...');
+            
             // Восстанавливаем выбранных контрагентов
             const saved = JSON.parse(localStorage.getItem('honest_sign_selected_contractors') || '{}');
+            console.log('- Сохраненные выбранные контрагенты:', saved);
             
             if (saved.contractorIds && Array.isArray(saved.contractorIds)) {
                 this.selectedContractors = saved.contractorIds.map(id => 
                     this.allContractors.find(c => c.id === id)
                 ).filter(c => c);
+                
+                console.log('- Восстановлено контрагентов:', this.selectedContractors.length);
             }
-
-            // Восстанавливаем отсканированные коды через appState
-            if (appState) {
-                const session = appState.getCurrentSession();
+    
+            // Восстанавливаем отсканированные коды через appState если доступен
+            if (window.appState && window.appState.getCurrentSession) {
+                const session = window.appState.getCurrentSession();
                 if (session.scannedCodes.length > 0) {
                     session.scannedCodes.forEach(code => this.addCodeToList(code));
+                    this.updateUI();
                 }
             }
-
+    
             this.updateSelectedContractorsUI();
             this.updateButtonStates();
             this.updateUI();
             
+            console.log('✅ ScannerManager: Сессия восстановлена');
+            
         } catch (error) {
-            console.error('❌ Ошибка восстановления сессии:', error);
+            console.error('❌ ScannerManager: Ошибка восстановления сессии:', error);
             this.selectedContractors = [];
         }
     }
