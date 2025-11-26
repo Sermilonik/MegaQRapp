@@ -875,6 +875,132 @@ class ScannerManager {
             });
         }
     }
+
+    // СИНХРОНИЗАЦИЯ ДАННЫХ
+    exportData() {
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        const exportData = window.appState.exportForSync();
+        
+        // Создаем файл для скачивания
+        const blob = new Blob([exportData], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `contractors-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        showSuccess('Данные экспортированы в файл', 3000);
+    }
+
+    importData() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,.csv';
+        
+        input.onchange = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                
+                if (file.name.endsWith('.json')) {
+                    // Импорт JSON
+                    if (window.appState && window.appState.manualImport) {
+                        window.appState.manualImport(content);
+                    }
+                } else if (file.name.endsWith('.csv')) {
+                    // Импорт CSV
+                    if (window.appState && window.appState.importContractorsFromCSV) {
+                        window.appState.importContractorsFromCSV(content);
+                    }
+                }
+            };
+            reader.readAsText(file);
+        };
+        
+        input.click();
+    }
+
+    showQRCode() {
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        window.appState.syncWithQRCode();
+    }
+
+    scanQRCode() {
+        showInfo('Для сканирования QR-кода используйте основную камеру сканирования', 5000);
+        this.startCamera();
+    }
+
+    // Обработка сканированных QR-кодов синхронизации
+    handleSyncQRCode(decodedText) {
+        try {
+            // Проверяем, это ли данные синхронизации
+            const data = JSON.parse(decodedText);
+            
+            if (data.contractors && data.timestamp) {
+                if (confirm(`Импортировать ${data.contractors.length} контрагентов?`)) {
+                    if (window.appState && window.appState.importFromQRCode) {
+                        window.appState.importFromQRCode(decodedText);
+                        this.loadContractors(); // Перезагружаем контрагентов
+                        this.loadContractorsManagerList(); // Обновляем список
+                    }
+                }
+                return true;
+            }
+        } catch (error) {
+            // Не JSON данные, значит обычный QR-код
+            console.log('Обычный QR-код, не данные синхронизации');
+            return false;
+        }
+        
+        return false;
+    }
+
+    // Обновите метод onScanSuccess для обработки синхронизации
+    onScanSuccess(decodedText) {
+        // Сначала проверяем, это ли данные синхронизации
+        if (this.handleSyncQRCode(decodedText)) {
+            return;
+        }
+        
+        // Обычное сканирование кодов...
+        if (this.selectedContractors.length === 0) {
+            showError('❌ Сначала выберите контрагентов');
+            return;
+        }
+
+        if (appState && appState.hasCodeBeenScanned(decodedText)) {
+            showWarning('⚠️ Этот код уже отсканирован');
+            return;
+        }
+
+        const scannedCode = {
+            code: decodedText,
+            timestamp: new Date().toISOString(),
+            contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
+        };
+        
+        if (appState) {
+            appState.addScannedCode(decodedText);
+        }
+        
+        this.addCodeToList(scannedCode);
+        this.updateUI();
+        
+        showSuccess(`✅ Код добавлен`, 2000);
+    }
+
 }
 
 // ИНИЦИАЛИЗАЦИЯ
