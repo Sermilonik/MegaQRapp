@@ -177,7 +177,32 @@
             </div>
         </div>
     </div>
-
+    
+    <div class="card">
+        <div class="card-header">
+            <h3>🔄 Синхронизация между устройствами</h3>
+        </div>
+        
+        <div class="sync-actions">
+            <button class="btn btn-outline" onclick="scannerManager.exportData()">
+                📤 Экспорт данных
+            </button>
+            <button class="btn btn-outline" onclick="scannerManager.importData()">
+                📥 Импорт данных
+            </button>
+            <button class="btn btn-outline" onclick="scannerManager.showQRCode()">
+                📱 Показать QR-код
+            </button>
+            <button class="btn btn-outline" onclick="scannerManager.scanQRCode()">
+                🔍 Сканировать QR-код
+            </button>
+        </div>
+        
+        <div style="margin-top: 15px; font-size: 12px; color: #666;">
+            <strong>💡 Подсказка:</strong> Используйте QR-коды для переноса данных между ПК и мобильным устройством
+        </div>
+    </div>
+    
     <!-- КОНТЕЙНЕР ДЛЯ УВЕДОМЛЕНИЙ -->
     <div id="notificationContainer"></div>
 
