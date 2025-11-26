@@ -60,27 +60,18 @@ class ScannerManager {
 
     // ЗАГРУЗКА КОНТРАГЕНТОВ
     loadContractors() {
-        console.log('🔍 Загрузка контрагентов');
+        console.log('🔍 ScannerManager: Загрузка контрагентов');
         
-        try {
-            const saved = localStorage.getItem('honest_sign_contractors');
-            
-            if (saved) {
-                this.allContractors = JSON.parse(saved);
-                console.log(`✅ Загружено ${this.allContractors.length} контрагентов`);
-            } else {
-                this.loadDefaultContractors();
-                this.saveContractors();
-                console.log('✅ Загружены контрагенты по умолчанию');
-            }
-            
-            this._contractorsLoaded = true;
-            
-        } catch (error) {
-            console.error('❌ Ошибка загрузки контрагентов:', error);
+        // ВСЕГДА загружаем из AppState
+        if (window.appState && window.appState.getAllContractors) {
+            this.allContractors = window.appState.getAllContractors();
+            console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов из AppState`);
+        } else {
+            console.error('❌ ScannerManager: AppState не доступен');
             this.loadDefaultContractors();
         }
         
+        this._contractorsLoaded = true;
         this.initContractorSearch();
     }
 
@@ -94,11 +85,14 @@ class ScannerManager {
     }
 
     saveContractors() {
-        try {
-            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.allContractors));
-            console.log(`💾 Сохранено ${this.allContractors.length} контрагентов`);
-        } catch (error) {
-            console.error('❌ Ошибка сохранения контрагентов:', error);
+        console.log('💾 ScannerManager: Сохранение контрагентов через AppState');
+        
+        // ВСЕГДА сохраняем через AppState
+        if (window.appState && window.appState.saveContractors) {
+            window.appState.saveContractors();
+            console.log('✅ ScannerManager: Контрагенты сохранены через AppState');
+        } else {
+            console.error('❌ ScannerManager: AppState не доступен для сохранения');
         }
     }
 
