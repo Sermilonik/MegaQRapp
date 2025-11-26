@@ -1,11 +1,15 @@
 class ScannerManager {
     constructor() {
+        // Сохраняем глобальную ссылку ПЕРВЫМ ДЕЛОМ
         if (window.scannerManager) {
             console.log('⚠️ ScannerManager уже существует! Возвращаем существующий экземпляр.');
             return window.scannerManager;
         }
 
-    // Ждем загрузки AppState
+        // Сохраняем this в глобальную переменную сразу
+        window.scannerManager = this;
+
+        // Ждем загрузки AppState
         if (typeof AppState === 'undefined') {
             console.error('❌ AppState не загружен! Откладываем инициализацию...');
             setTimeout(() => {
@@ -39,9 +43,10 @@ class ScannerManager {
         this.apkMode = false;
         this._stopInProgress = false;
         this._cleanupTimeout = null;
+        this._contractorsLoaded = false;
         
-        // Сохраняем глобальную ссылку
-        window.scannerManager = this;
+        // УБИРАЕМ повторное сохранение в window.scannerManager
+        // window.scannerManager = this; // ← ЭТУ СТРОКУ УДАЛИТЬ
         
         this.init();
     }
