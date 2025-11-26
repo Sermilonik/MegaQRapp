@@ -1,582 +1,348 @@
 class ScannerManager {
     constructor() {
-        // Сохраняем глобальную ссылку ПЕРВЫМ ДЕЛОМ
+        console.log('🚀 Создание ScannerManager');
+        
+        // Проверяем существующий экземпляр
         if (window.scannerManager) {
-            console.log('⚠️ ScannerManager уже существует! Возвращаем существующий экземпляр.');
+            console.log('⚠️ ScannerManager уже существует');
             return window.scannerManager;
         }
 
-        // Сохраняем this в глобальную переменную сразу
+        // Сохраняем глобальную ссылку
         window.scannerManager = this;
 
-        // Ждем загрузки AppState
-        if (typeof AppState === 'undefined') {
-            console.error('❌ AppState не загружен! Откладываем инициализацию...');
-            setTimeout(() => {
-                if (typeof AppState !== 'undefined') {
-                    this.initialize();
-                } else {
-                    console.error('❌ AppState все еще не загружен после таймаута');
-                }
-            }, 1000);
-            return;
-        }
-        
-        this.initialize();
-    }
-
-    initialize() {
-        console.log('🚀 Инициализация ScannerManager с загруженным AppState');
-        
-        if (typeof appState === 'undefined') {
-            console.log('🔄 Создаем новый экземпляр AppState...');
-            window.appState = new AppState();
-        }
-
+        // Инициализируем свойства
         this.scanner = null;
         this.isScanning = false;
         this.selectedContractors = [];
         this.allContractors = [];
-        this.pdfGenerator = null;
-        this.notificationManager = new NotificationManager();
         this.cleaningUp = false;
-        this.apkMode = false;
         this._stopInProgress = false;
-        this._cleanupTimeout = null;
         this._contractorsLoaded = false;
-        
-        // УБИРАЕМ повторное сохранение в window.scannerManager
-        // window.scannerManager = this; // ← ЭТУ СТРОКУ УДАЛИТЬ
-        
+        this.apkMode = false;
+
+        // Запускаем инициализацию
         this.init();
     }
 
     async init() {
-        console.log('🚀 Инициализация ScannerManager');
-
-        // ПРОВЕРЯЕМ APK РЕЖИМ В САМОМ НАЧАЛЕ
+        console.log('🔧 Инициализация ScannerManager');
+        
+        // Проверяем APK режим
         this.optimizeForAPK();
-
-        // Проверяем совместимость браузера
-        const compatibility = this.checkBrowserCompatibility();
         
-        if (!compatibility.compatible) {
-            this.showBrowserCompatibilityWarning(compatibility);
-        }
-        
+        // Загружаем контрагентов
         this.loadContractors();
-        this.attachEventListeners();
+        
+        // Восстанавливаем сессию
         this.checkExistingSession();
         
-        // Только если браузер совместим - проверяем камеру
-        if (compatibility.compatible) {
-            setTimeout(async () => {
-                const cameraAvailable = await this.restoreCameraState();
-                if (!cameraAvailable) {
-                    showWarning('📷 Камера требует перезагрузки страницы для работы', 5000);
-                }
-            }, 500);
-        }
+        // Подключаем обработчики
+        this.setupEventListeners();
         
-        showSuccess('Складской модуль готов к работе', 3000);
+        // Проверяем камеру
+        await this.checkCameraAvailability();
+        
+        console.log('✅ ScannerManager инициализирован');
+        showSuccess('Складской модуль готов к работе', 2000);
+    }
+
+    // ОПТИМИЗАЦИЯ ДЛЯ APK
+    optimizeForAPK() {
+        const isInAPK = !window.location.protocol.startsWith('http');
+        const isWebView = /WebView|Android/.test(navigator.userAgent);
+        
+        if (isInAPK || isWebView) {
+            console.log('📱 APK режим активирован');
+            this.apkMode = true;
+        }
     }
 
     // ЗАГРУЗКА КОНТРАГЕНТОВ
     loadContractors() {
-        console.log('🔍 Загрузка контрагентов...');
-
-        if (this._contractorsLoaded) {
-            console.log('⚠️ Контрагенты уже загружены, пропускаем');
-            return;
-        }
+        console.log('🔍 Загрузка контрагентов');
         
         try {
-            // Пробуем загрузить из localStorage
-            const savedContractors = localStorage.getItem('honest_sign_contractors');
-            console.log('1. Данные в localStorage:', savedContractors ? `Найдено ${savedContractors.length} символов` : '❌ Пусто');
+            const saved = localStorage.getItem('honest_sign_contractors');
             
-            if (savedContractors) {
-                console.log('2. Содержимое localStorage:', savedContractors.substring(0, 200) + '...');
-
-                try {
-                    const parsed = JSON.parse(savedContractors);
-                    console.log('3. Успешно распарсено, количество:', parsed.length);
-                    console.log('4. Конкретные контрагенты:', parsed.map(c => `${c.id}: ${c.name}`));
-                    
-                    this.allContractors = parsed;
-                    console.log('✅ Загружено контрагентов из хранилища:', this.allContractors.length);
-                    
-                } catch (parseError) {
-                    console.error('❌ Ошибка парсинга JSON:', parseError);
-                    this.loadDefaultContractors();
-                    this.saveContractors();
-                }
-                
+            if (saved) {
+                this.allContractors = JSON.parse(saved);
+                console.log(`✅ Загружено ${this.allContractors.length} контрагентов`);
             } else {
-                console.warn('⚠️ Нет сохраненных контрагентов, загружаем стандартные');
                 this.loadDefaultContractors();
                 this.saveContractors();
+                console.log('✅ Загружены контрагенты по умолчанию');
             }
             
-            console.log('5. Итоговое количество контрагентов:', this.allContractors.length);
-            console.log('6. Конкретные контрагенты после загрузки:', this.allContractors.map(c => c.name));
-            this.initContractorSearch();
+            this._contractorsLoaded = true;
             
         } catch (error) {
-            console.error('❌ Общая ошибка загрузки контрагентов:', error);
+            console.error('❌ Ошибка загрузки контрагентов:', error);
             this.loadDefaultContractors();
-            this.saveContractors();
         }
+        
+        this.initContractorSearch();
     }
 
-    // Проверяем целостность данных контрагентов
-    validateContractorsData() {
-        console.log('🔍 Проверка целостности данных контрагентов...');
-        
-        let hasErrors = false;
-        
-        // Проверяем каждый контрагент
-        this.allContractors = this.allContractors.filter(contractor => {
-            // Проверяем обязательные поля
-            if (!contractor.id || !contractor.name) {
-                console.warn('⚠️ Удален некорректный контрагент:', contractor);
-                hasErrors = true;
-                return false;
-            }
-            
-            // Проверяем типы данных
-            if (typeof contractor.id !== 'number' || typeof contractor.name !== 'string') {
-                console.warn('⚠️ Исправлен контрагент с некорректными типами:', contractor);
-                contractor.id = parseInt(contractor.id) || Date.now();
-                contractor.name = String(contractor.name || '');
-                contractor.category = String(contractor.category || 'Общая категория');
-                hasErrors = true;
-            }
-            
-            return true;
-        });
-        
-        // Исправляем дублирующиеся ID
-        this.fixDuplicateIds();
-        
-        if (hasErrors) {
-            console.log('🔄 Обнаружены ошибки в данных, сохраняем исправленные данные...');
-            this.saveContractors();
-        }
-        
-        console.log('✅ Проверка целостности завершена');
-    }
-
-    // НОВЫЙ МЕТОД: Для отладки - показывает сохраненные данные
-    debugStorage() {
-        console.log('🐛 ОТЛАДКА ХРАНИЛИЩА:');
-        
-        const keys = ['honest_sign_contractors', 'honest_sign_selected_contractors'];
-        
-        keys.forEach(key => {
-            const value = localStorage.getItem(key);
-            console.log(`- ${key}:`, value ? `Данные есть (${value.length} символов)` : '❌ Нет данных');
-            
-            if (value) {
-                try {
-                    const parsed = JSON.parse(value);
-                    console.log(`  ↳ Парсинг:`, Array.isArray(parsed) ? `Массив из ${parsed.length} элементов` : 'Объект');
-                } catch (e) {
-                    console.log(`  ↳ ❌ Ошибка парсинга:`, e.message);
-                }
-            }
-        });
-        
-        // Показываем информацию в интерфейсе
-        const contractorsCount = this.allContractors.length;
-        const savedCount = localStorage.getItem('honest_sign_contractors') ? 'есть' : 'нет';
-        
-        showInfo(`
-            📊 Статус хранения:
-            • Контрагентов в памяти: ${contractorsCount}
-            • Данные в хранилище: ${savedCount}
-            • Выбрано: ${this.selectedContractors.length}
-        `, 5000);
-    }
-
-    // УПРАВЛЕНИЕ КОНТРАГЕНТАМИ
-    showAddContractorForm() {
-        console.log('➕ Показываем форму добавления контрагента');
-        this.showContractorManager();
-        
-        setTimeout(() => {
-            const addForm = document.getElementById('addContractorForm');
-            const importForm = document.getElementById('importForm');
-            
-            if (addForm) {
-                addForm.classList.remove('hidden');
-                document.getElementById('contractorName').value = '';
-                document.getElementById('contractorCategory').value = '';
-                document.getElementById('contractorName').focus();
-            }
-            if (importForm) importForm.classList.add('hidden');
-        }, 100);
-    }
-
-    // Показываем форму импорта
-    showImportForm() {
-        console.log('📥 Показываем форму импорта');
-        this.showContractorManager();
-        
-        setTimeout(() => {
-            const addForm = document.getElementById('addContractorForm');
-            const importForm = document.getElementById('importForm');
-            
-            if (addForm) addForm.classList.add('hidden');
-            if (importForm) {
-                importForm.classList.remove('hidden');
-                document.getElementById('importData').focus();
-            }
-        }, 100);
-    }
-
-    // управление модальными окнами
-    showContractorManager() {
-        console.log('👥 Показываем менеджер контрагентов');
-        const modal = document.getElementById('contractorManager');
-        if (modal) {
-            modal.classList.remove('hidden');
-            this.loadContractorsManagerList();
-            // Блокируем прокрутку фона
-            document.body.style.overflow = 'hidden';
-        }
-    }
-
-    // прячем управление клиентами
-    hideContractorManager() {
-        console.log('👥 Скрываем менеджер контрагентов');
-        
-        const modal = document.getElementById('contractorManager');
-        if (modal) {
-            modal.classList.add('hidden');
-            // Восстанавливаем прокрутку страницы
-            document.body.style.overflow = '';
-            console.log('✅ Менеджер контрагентов скрыт');
-        } else {
-            console.error('❌ Модальное окно не найдено');
-        }
-    }
-    
-    // lдобавление контрагентов
-    addContractor() {
-        console.log('🎯 НАЧАЛО: Добавление нового контрагента');
-        
-        // ЗАЩИТА ОТ ОШИБОК appState
-        if (typeof appState === 'undefined') {
-            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА: appState не определен');
-            showError('Ошибка системы. Перезагрузите приложение.');
-            return;
-        }
-    
-        const nameInput = document.getElementById('contractorName');
-        const categoryInput = document.getElementById('contractorCategory');
-        
-        console.log('- Поле имени:', nameInput);
-        console.log('- Поле категории:', categoryInput);
-        
-        if (!nameInput || !categoryInput) {
-            console.error('❌ Поля ввода не найдены в DOM');
-            showError('Ошибка: поля ввода не найдены');
-            return;
-        }
-        
-        const name = nameInput.value.trim();
-        const category = categoryInput.value.trim() || 'Общая категория';
-        
-        console.log('- Введенные данные:', { name, category });
-        console.log('- Текущие контрагенты до добавления:', this.allContractors.length);
-        
-        if (!name) {
-            showError('❌ Введите название контрагента');
-            nameInput.focus();
-            return;
-        }
-        
-        // Проверяем дубликаты
-        const exists = this.allContractors.some(c => 
-            c.name.toLowerCase() === name.toLowerCase()
-        );
-        
-        if (exists) {
-            showError('❌ Контрагент с таким названием уже существует');
-            nameInput.focus();
-            return;
-        }
-        
-        try {
-            // Создаем нового контрагента
-            const newId = this.allContractors.length > 0 
-                ? Math.max(...this.allContractors.map(c => c.id)) + 1 
-                : 1;
-                
-            const newContractor = {
-                id: newId,
-                name: name,
-                category: category
-            };
-            
-            console.log('- Создаем контрагента:', newContractor);
-            
-            // Добавляем в массив
-            this.allContractors.push(newContractor);
-            console.log('- Контрагентов после добавления:', this.allContractors.length);
-            console.log('🔍 ДИАГНОСТИКА перед сохранением:');
-            console.log('- Состояние allContractors:', this.allContractors);
-            console.log('- Тип allContractors:', typeof this.allContractors);
-            console.log('- Является массивом:', Array.isArray(this.allContractors));
-            
-            // Сохраняем в хранилище
-            console.log('💾 Сохраняем контрагентов...');
-            this.saveContractors();
-
-            //Обновляем поиск чтобы сразу показать нового контрагента
-            console.log('🔄 Обновляем поиск контрагентов...');
-            this.filterContractors(''); // Показываем всех контрагентов
-
-            // Обновляем интерфейс
-            console.log('🔄 Обновляем интерфейс...');
-            this.hideAddContractorForm();
-            this.loadContractorsManagerList();
-
-            console.log('🔍 ПРОВЕРКА СРАЗУ ПОСЛЕ СОХРАНЕНИЯ:');
-            const immediatelyAfterSave = localStorage.getItem('honest_sign_contractors');
-            console.log('- Данные сразу после saveContractors():', immediatelyAfterSave);
-            
-        if (immediatelyAfterSave) {
-            try {
-                const parsed = JSON.parse(immediatelyAfterSave);
-                console.log('- Количество контрагентов в хранилище:', parsed.length);
-                console.log('- Содержимое:', parsed.map(c => c.name));
-            } catch (e) {
-                console.error('- Ошибка парсинга:', e);
-            }
-        }
-            
-            // Обновляем интерфейс
-            console.log('🔄 Обновляем интерфейс...');
-            this.hideAddContractorForm();
-            this.loadContractorsManagerList();
-            
-            // Очищаем поля
-            nameInput.value = '';
-            categoryInput.value = '';
-            
-            showSuccess(`✅ Контрагент "${name}" успешно добавлен!`, 3000);
-            console.log('🎉 КОНТРАГЕНТ УСПЕШНО ДОБАВЛЕН И СОХРАНЕН');
-            
-        } catch (error) {
-            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении контрагента:', error);
-            showError('Ошибка при добавлении контрагента: ' + error.message);
-        }
-    }
-
-    importContractors() {
-        console.log('📥 Импортируем контрагентов');
-        
-        const importData = document.getElementById('importData');
-        const data = importData?.value.trim();
-        
-        if (!data) {
-            showError('❌ Введите данные для импорта');
-            return;
-        }
-        
-        try {
-            const lines = data.split('\n').filter(line => line.trim());
-            let importedCount = 0;
-            let errorCount = 0;
-            
-            lines.forEach((line, index) => {
-                const parts = line.split(',').map(part => part.trim());
-                
-                if (parts.length >= 1 && parts[0]) {
-                    const name = parts[0];
-                    const category = parts[1] || 'Импортированные';
-                    
-                    // Проверяем дубликаты
-                    const exists = this.allContractors.some(c => 
-                        c.name.toLowerCase() === name.toLowerCase()
-                    );
-                    
-                    if (!exists) {
-                        const newId = Math.max(...this.allContractors.map(c => c.id), 0) + 1;
-                        this.allContractors.push({
-                            id: newId,
-                            name: name,
-                            category: category
-                        });
-                        importedCount++;
-                    } else {
-                        errorCount++;
-                        console.log(`⚠️ Дубликат: ${name}`);
-                    }
-                } else {
-                    errorCount++;
-                }
-            });
-            
-            if (importedCount > 0) {
-                this.saveContractors();
-                this.loadContractorsManagerList();
-            }
-            
-            let message = `✅ Импортировано: ${importedCount} контрагентов`;
-            if (errorCount > 0) {
-                message += `, пропущено: ${errorCount}`;
-            }
-            
-            showSuccess(message, 5000);
-            this.hideImportForm();
-            
-        } catch (error) {
-            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА при добавлении контрагента:', error);
-            showError('Ошибка при добавлении контрагента: ' + error.message);
-        }
-    }
-
-    // ФИЛЬТРАЦИЯ КОНТРАГЕНТОВ В МЕНЕДЖЕРЕ
-    filterContractorsList() {
-        const searchInput = document.getElementById('managerSearch');
-        const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
-        
-        const container = document.getElementById('contractorsManagerList');
-        if (!container) return;
-        
-        let filteredContractors = this.allContractors;
-        
-        if (query) {
-            filteredContractors = this.allContractors.filter(contractor => 
-                contractor.name.toLowerCase().includes(query) ||
-                contractor.category.toLowerCase().includes(query)
-            );
-        }
-        
-        if (filteredContractors.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">🔍</span>
-                    <p>Контрагенты не найдены</p>
-                    <small>Попробуйте изменить запрос</small>
-                </div>
-            `;
-            return;
-        }
-        
-        container.innerHTML = filteredContractors.map(contractor => `
-            <div class="contractor-manager-item">
-                <div class="contractor-info">
-                    <div class="contractor-name">${contractor.name}</div>
-                    <div class="contractor-category">${contractor.category}</div>
-                </div>
-                <div class="contractor-actions">
-                    <button class="btn btn-sm btn-outline" data-action="selectContractorInManager" data-contractor-id="${contractor.id}">
-                        ✅ Выбрать
-                    </button>
-                    <button class="btn btn-sm btn-danger" data-action="deleteContractor" data-contractor-id="${contractor.id}">
-                        🗑️ Удалить
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
-
-    // СОЗДАНИЕ ТЕСТОВЫХ КОНТРАГЕНТОВ
-    createTestContractors() {
-        console.log('🧪 Создаем тестовых контрагентов...');
-        
-        // Очищаем существующих
-        this.allContractors = [];
-        
-        // Создаем тестовых контрагентов
-        const testContractors = [
+    loadDefaultContractors() {
+        this.allContractors = [
             { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель' },
             { id: 2, name: 'ИП Иванов', category: 'Розничная сеть' },
             { id: 3, name: 'ООО "Луч"', category: 'Дилер' },
             { id: 4, name: 'АО "Вектор"', category: 'Партнер' }
         ];
-        
-        this.allContractors = testContractors;
-        this.saveContractors();
-        
-        showSuccess('✅ Создано 4 тестовых контрагента', 3000);
-        this.loadContractorsManagerList();
     }
 
-    // ОБРАБОТЧИКИ УВЕДОМЛЕНИЙ
-    showNotifications() {
-        console.log('🔔 Показываем уведомления');
-        const panel = document.getElementById('warehouseNotifications');
-        if (panel) {
-            panel.classList.remove('hidden');
+    saveContractors() {
+        try {
+            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.allContractors));
+            console.log(`💾 Сохранено ${this.allContractors.length} контрагентов`);
+        } catch (error) {
+            console.error('❌ Ошибка сохранения контрагентов:', error);
         }
     }
 
-    hideNotifications() {
-        console.log('🔔 Скрываем уведомления');
-        const panel = document.getElementById('warehouseNotifications');
-        if (panel) {
-            panel.classList.add('hidden');
-        }
-    }
+    // ПОИСК КОНТРАГЕНТОВ
+    initContractorSearch() {
+        const searchInput = document.getElementById('contractorSearch');
+        if (!searchInput) return;
 
-    // ИСПРАВЛЕНИЕ ДУБЛИРУЮЩИХСЯ ID
-    fixDuplicateIds() {
-        let maxId = Math.max(...this.allContractors.map(c => c.id || 0), 0);
-        
-        this.allContractors.forEach((contractor, index) => {
-            // Проверяем дубликаты ID
-            const duplicateIndex = this.allContractors.findIndex((c, i) => 
-                i !== index && c.id === contractor.id
-            );
-            
-            if (duplicateIndex !== -1) {
-                maxId++;
-                contractor.id = maxId;
-                console.log(`🔄 Исправлен дублирующийся ID: ${contractor.name} -> ${contractor.id}`);
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            this.filterContractors(query);
+        });
+
+        searchInput.addEventListener('focus', () => {
+            this.filterContractors('');
+            this.showDropdown();
+        });
+
+        // Скрытие dropdown при клике вне
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.contractor-search')) {
+                this.hideDropdown();
             }
         });
+    }
+
+    filterContractors(query = '') {
+        const dropdown = document.getElementById('contractorDropdown');
+        if (!dropdown) return;
+
+        let filtered = this.allContractors;
         
+        if (query) {
+            const terms = query.toLowerCase().split(' ');
+            filtered = this.allContractors.filter(contractor => 
+                terms.some(term => 
+                    contractor.name.toLowerCase().includes(term) ||
+                    contractor.category.toLowerCase().includes(term)
+                )
+            );
+        }
+
+        // Ограничиваем показ
+        filtered = filtered.slice(0, 10);
+
+        if (filtered.length === 0) {
+            dropdown.innerHTML = `
+                <div class="dropdown-item no-results">
+                    <div>🔍 Контрагенты не найдены</div>
+                </div>
+            `;
+        } else {
+            dropdown.innerHTML = filtered.map(contractor => {
+                const isSelected = this.selectedContractors.some(c => c.id === contractor.id);
+                return `
+                    <div class="dropdown-item ${isSelected ? 'selected' : ''}" 
+                         onclick="scannerManager.selectContractor(${contractor.id})">
+                        <div class="contractor-info">
+                            <div class="contractor-name">${contractor.name}</div>
+                            <div class="contractor-category">${contractor.category}</div>
+                        </div>
+                        ${isSelected ? '<div class="selected-badge">✓</div>' : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        this.showDropdown();
+    }
+
+    selectContractor(contractorId) {
+        const contractor = this.allContractors.find(c => c.id === contractorId);
+        if (!contractor) return;
+
+        const isSelected = this.selectedContractors.some(c => c.id === contractorId);
+        
+        if (isSelected) {
+            this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
+            showWarning(`Удален: ${contractor.name}`, 2000);
+        } else {
+            this.selectedContractors.push(contractor);
+            showSuccess(`Добавлен: ${contractor.name}`, 2000);
+        }
+
+        this.updateSelectedContractorsUI();
+        this.updateButtonStates();
+        this.saveSelectedContractors();
+        this.hideDropdown();
+        
+        // Очищаем поле поиска
+        const searchInput = document.getElementById('contractorSearch');
+        if (searchInput) searchInput.value = '';
+    }
+
+    removeContractor(contractorId) {
+        this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
+        this.updateSelectedContractorsUI();
+        this.updateButtonStates();
+        this.saveSelectedContractors();
+    }
+
+    clearContractors() {
+        this.selectedContractors = [];
+        this.updateSelectedContractorsUI();
+        this.updateButtonStates();
+        this.saveSelectedContractors();
+        this.hideDropdown();
+    }
+
+    updateSelectedContractorsUI() {
+        const container = document.getElementById('selectedContractors');
+        const list = document.getElementById('contractorsList');
+        const count = document.getElementById('selectedCount');
+        
+        if (!container || !list) return;
+
+        if (this.selectedContractors.length === 0) {
+            container.classList.add('hidden');
+            if (count) count.textContent = '0';
+            return;
+        }
+
+        container.classList.remove('hidden');
+        if (count) count.textContent = this.selectedContractors.length;
+
+        list.innerHTML = this.selectedContractors.map(contractor => `
+            <div class="contractor-tag">
+                <span class="contractor-name">${contractor.name}</span>
+                <span class="contractor-category">${contractor.category}</span>
+                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeContractor(${contractor.id})">
+                    ✕
+                </button>
+            </div>
+        `).join('');
+    }
+
+    saveSelectedContractors() {
+        try {
+            const data = {
+                contractorIds: this.selectedContractors.map(c => c.id),
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem('honest_sign_selected_contractors', JSON.stringify(data));
+        } catch (error) {
+            console.error('❌ Ошибка сохранения выбранных контрагентов:', error);
+        }
+    }
+
+    // УПРАВЛЕНИЕ КОНТРАГЕНТАМИ
+    showContractorManager() {
+        const modal = document.getElementById('contractorManager');
+        if (modal) {
+            modal.classList.remove('hidden');
+            this.loadContractorsManagerList();
+            document.body.style.overflow = 'hidden';
+        }
+    }
+
+    hideContractorManager() {
+        const modal = document.getElementById('contractorManager');
+        if (modal) {
+            modal.classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+    }
+
+    showAddContractorForm() {
+        this.showContractorManager();
+        setTimeout(() => {
+            const addForm = document.getElementById('addContractorForm');
+            const importForm = document.getElementById('importForm');
+            if (addForm) addForm.classList.remove('hidden');
+            if (importForm) importForm.classList.add('hidden');
+        }, 100);
+    }
+
+    showImportForm() {
+        this.showContractorManager();
+        setTimeout(() => {
+            const addForm = document.getElementById('addContractorForm');
+            const importForm = document.getElementById('importForm');
+            if (addForm) addForm.classList.add('hidden');
+            if (importForm) importForm.classList.remove('hidden');
+        }, 100);
+    }
+
+    hideAddContractorForm() {
+        const addForm = document.getElementById('addContractorForm');
+        const importForm = document.getElementById('importForm');
+        if (addForm) addForm.classList.add('hidden');
+        if (importForm) importForm.classList.add('hidden');
+    }
+
+    addContractor() {
+        const nameInput = document.getElementById('contractorName');
+        const categoryInput = document.getElementById('contractorCategory');
+        
+        if (!nameInput || !categoryInput) return;
+
+        const name = nameInput.value.trim();
+        const category = categoryInput.value.trim() || 'Общая категория';
+
+        if (!name) {
+            showError('Введите название контрагента');
+            return;
+        }
+
+        // Проверка дубликатов
+        if (this.allContractors.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+            showError('Контрагент с таким названием уже существует');
+            return;
+        }
+
+        const newId = this.allContractors.length > 0 
+            ? Math.max(...this.allContractors.map(c => c.id)) + 1 
+            : 1;
+
+        const newContractor = { id: newId, name, category };
+        this.allContractors.push(newContractor);
         this.saveContractors();
+
+        // Обновляем интерфейс
+        nameInput.value = '';
+        categoryInput.value = '';
+        this.hideAddContractorForm();
+        this.loadContractorsManagerList();
+
+        showSuccess(`Контрагент "${name}" добавлен`, 3000);
     }
 
-    loadDefaultContractors() {
-        const defaultContractors = [
-            { id: 1, name: 'ООО "Ромашка"', category: 'Оптовый покупатель' },
-            { id: 2, name: 'ИП Иванов', category: 'Розничная сеть' },
-            { id: 3, name: 'ООО "Луч"', category: 'Дилер' },
-            { id: 4, name: 'АО "Вектор"', category: 'Партнер' },
-            { id: 5, name: 'ООО "Луч Саяны"', category: 'Дилер' }
-        ];
-        
-        this.allContractors = defaultContractors;
-        console.log('✅ Загружены стандартные контрагенты');
-    }
-
-    // ЗАГРУЗКА СПИСКА ДЛЯ МЕНЕДЖЕРА
     loadContractorsManagerList() {
-        console.log('🔍 Загрузка списка контрагентов в менеджер:');
-        console.log('- Текущее количество контрагентов:', this.allContractors.length);
-        console.log('- Содержимое allContractors:', this.allContractors.map(c => c.name));
-
         const container = document.getElementById('contractorsManagerList');
         if (!container) return;
-        
+
         if (this.allContractors.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <span class="empty-icon">👥</span>
                     <p>Нет контрагентов</p>
-                    <small>Добавьте контрагентов вручную или импортируйте из CSV</small>
                 </div>
             `;
             return;
         }
-        
+
         container.innerHTML = this.allContractors.map(contractor => `
             <div class="contractor-manager-item">
                 <div class="contractor-info">
@@ -593,997 +359,182 @@ class ScannerManager {
                 </div>
             </div>
         `).join('');
-
-        console.log('✅ Список контрагентов обновлен, элементов:', this.allContractors.length);
-    }
-
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    hideAddContractorForm() {
-        console.log('❌ Скрываем форму добавления контрагента');
-        
-        const addForm = document.getElementById('addContractorForm');
-        if (addForm) {
-            addForm.classList.add('hidden');
-            console.log('✅ Форма добавления скрыта');
-        }
-        
-        // Также скрываем форму импорта если открыта
-        const importForm = document.getElementById('importForm');
-        if (importForm) {
-            importForm.classList.add('hidden');
-        }
-    }
-
-    hideImportForm() {
-        console.log('❌ Скрываем форму импорта');
-        
-        const importForm = document.getElementById('importForm');
-        if (importForm) {
-            importForm.classList.add('hidden');
-            console.log('✅ Форма импорта скрыта');
-        }
     }
 
     selectContractorInManager(contractorId) {
-        this.toggleContractor(contractorId);
+        this.selectContractor(contractorId);
         this.hideContractorManager();
     }
 
     deleteContractor(contractorId) {
-        if (confirm('Удалить этого контрагента?')) {
-            this.allContractors = this.allContractors.filter(c => c.id !== contractorId);
-            this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
-            this.saveContractors();
-            this.updateSelectedContractorsUI();
-            this.loadContractorsManagerList();
-            showWarning('🗑️ Контрагент удален', 3000);
-        }
-    }
-
-    // ЭКСПОРТ КОНТРАГЕНТОВ
-    exportContractors() {
-        const csvContent = this.allContractors.map(c => 
-            `"${c.name}","${c.category}"`
-        ).join('\n');
+        if (!confirm('Удалить этого контрагента?')) return;
         
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'контрагенты.csv';
-        a.click();
-        URL.revokeObjectURL(url);
-        
-        showSuccess('📤 Контрагенты экспортированы в CSV', 3000);
-    }
-
-    // ИНИЦИАЛИЗАЦИЯ ПОИСКА КОНТРАГЕНТОВ
-    initContractorSearch() {
-        const searchInput = document.getElementById('contractorSearch');
-        const dropdown = document.getElementById('contractorDropdown');
-        
-        if (!searchInput || !dropdown) {
-            console.error('❌ Элементы поиска не найдены');
-            return;
-        }
-
-        console.log('🔍 Инициализация поиска контрагентов');
-
-        // ПОИСК ПРИ ВВОДЕ
-        let searchTimeout;
-        searchInput.addEventListener('input', (e) => {
-            clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                const query = e.target.value.trim();
-                console.log('🔍 Поиск:', query);
-                this.filterContractors(query);
-            }, 300);
-        });
-
-        // ПОКАЗ СПИСКА ПРИ ФОКУСЕ
-        searchInput.addEventListener('focus', () => {
-            console.log('📱 Поле ввода получило фокус');
-            const query = searchInput.value.trim();
-            this.filterContractors(query || '');
-            this.showDropdown();
-        });
-
-        // СКРЫТИЕ ПРИ КЛИКЕ ВНЕ
-        document.addEventListener('click', (e) => {
-            const isSearchInput = e.target === searchInput;
-            const isInDropdown = dropdown.contains(e.target);
-            const isDropdownItem = e.target.closest('.dropdown-item');
-            attachEventListeners()
-            // Если dropdown скрыт, не обрабатываем клики для его скрытия
-            if (dropdown.classList.contains('hidden')) {
-                return;
-            }
-            
-            // Скрываем только если клик был ВНЕ области поиска и dropdown
-            if (!isSearchInput && !isInDropdown && !isDropdownItem) {
-                this.hideDropdown();
-            }
-        });
-
-        // СКРЫТИЕ ПРИ SCROLL
-        window.addEventListener('scroll', () => {
-            if (!dropdown.classList.contains('hidden')) {
-                this.hideDropdown();
-            }
-        });
-
-        console.log('✅ Поиск контрагентов инициализирован');
-    }
-
-    // ФИЛЬТРАЦИЯ КОНТРАГЕНТОВ
-    filterContractors(query = '') {
-        const dropdown = document.getElementById('contractorDropdown');
-        if (!dropdown) {
-            console.error('❌ Dropdown элемент не найден');
-            return;
-        }
-    
-        console.log('🔍 Фильтрация контрагентов по запросу:', query);
-        console.log('- Всего контрагентов для фильтрации:', this.allContractors.length);
-        console.log('- Конкретные контрагенты:', this.allContractors.map(c => `${c.id}: ${c.name}`));
-    
-        let filteredContractors = this.allContractors;
-        
-        if (query) {
-            const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
-            console.log('- Условия поиска:', searchTerms);
-            
-            filteredContractors = this.allContractors.filter(contractor => {
-                const searchText = (contractor.name + ' ' + contractor.category).toLowerCase();
-                const matches = searchTerms.some(term => searchText.includes(term));
-                console.log(`- Проверка "${contractor.name}": ${matches ? '✅ совпадение' : '❌ нет совпадения'}`);
-                return matches;
-            });
-        } else {
-            console.log('- Запрос пустой, показываем всех контрагентов');
-        }
-    
-        console.log('📊 Найдено контрагентов после фильтрации:', filteredContractors.length);
-        console.log('- Отфильтрованные контрагенты:', filteredContractors.map(c => c.name));
-    
-        // ⚡ ИСПРАВЛЕНО: Увеличим лимит для тестирования
-        if (filteredContractors.length > 15) {
-            console.log(`- Ограничиваем показ до 15 из ${filteredContractors.length} контрагентов`);
-            filteredContractors = filteredContractors.slice(0, 15);
-        }
-    
-        // ОТОБРАЖАЕМ РЕЗУЛЬТАТЫ
-        if (filteredContractors.length === 0) {
-            console.log('- Показываем сообщение "нет результатов"');
-            dropdown.innerHTML = `
-                <div class="dropdown-item no-results">
-                    <div>🔍 Контрагенты не найдены</div>
-                    <small>Попробуйте изменить запрос</small>
-                </div>
-            `;
-        } else {
-            console.log('- Генерируем HTML для', filteredContractors.length, 'контрагентов');
-            dropdown.innerHTML = filteredContractors.map(contractor => {
-                const isSelected = this.selectedContractors.some(c => c.id === contractor.id);
-                console.log(`- Контрагент "${contractor.name}": ${isSelected ? 'выбран' : 'не выбран'}`);
-                
-                return `
-                    <div class="dropdown-item ${isSelected ? 'selected' : ''}" 
-                        data-contractor-id="${contractor.id}"
-                        onclick="window.scannerManager.handleContractorSelection(${contractor.id})">
-                        <div class="contractor-info">
-                            <div class="contractor-name">${contractor.name}</div>
-                            <div class="contractor-category">${contractor.category}</div>
-                        </div>
-                        ${isSelected ? '<div class="selected-badge">✓ Выбран</div>' : ''}
-                    </div>
-                `;
-            }).join('');
-        }
-        
-        // ПОКАЗЫВАЕМ СПИСОК ЕСЛИ ЕСТЬ РЕЗУЛЬТАТЫ
-        if (filteredContractors.length > 0) {
-            console.log('- Показываем dropdown с', filteredContractors.length, 'контрагентами');
-            this.showDropdown();
-        } else {
-            console.log('- Скрываем dropdown (нет результатов)');
-            this.hideDropdown();
-        }
-        
-        // ⚡ ДОБАВЛЕНО: Сохраняем текущий запрос для отладки
-        this.lastSearchQuery = query;
-    }
-
-    // ОБРАБОТКА ВЫБОРА КОНТРАГЕНТА
-    handleContractorSelection(contractorId) {
-        console.log('🎯 Выбран контрагент ID:', contractorId);
-        
-        this.toggleContractor(contractorId);
-        
-        // ОЧИЩАЕМ ПОИСК И СКРЫВАЕМ СПИСОК
-        const searchInput = document.getElementById('contractorSearch');
-        if (searchInput) searchInput.value = '';
-        this.hideDropdown();
-    }
-
-    // ДОБАВЛЕНИЕ/УДАЛЕНИЕ КОНТРАГЕНТА
-    toggleContractor(contractorId) {
-        console.log('🔄 Переключение контрагента:', contractorId);
-    
-        const contractor = this.allContractors.find(c => c.id === contractorId);
-        if (!contractor) {
-            console.error('❌ Контрагент не найден:', contractorId);
-            showError('Контрагент не найден');
-            return;
-        }
-    
-        const isSelected = this.selectedContractors.some(c => c.id === contractorId);
-        
-        if (isSelected) {
-            // УДАЛЯЕМ
-            this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
-            console.log('🗑️ Удален контрагент:', contractor.name);
-            showWarning(`Удален: ${contractor.name}`, 2000);
-        } else {
-            // ДОБАВЛЯЕМ
-            this.selectedContractors.push(contractor);
-            console.log('✅ Добавлен контрагент:', contractor.name);
-            showSuccess(`Добавлен: ${contractor.name}`, 2000);
-        }
-    
-        console.log('📋 Новый список выбранных:', this.selectedContractors.map(c => c.name));
-        
-        this.updateSelectedContractorsUI();
-        this.updateButtonStates();
-        this.updateSessionStatus();
-        
-        // СОХРАНЯЕМ В ХРАНИЛИЩЕ
-        this.saveSelectedContractors();
-    }
-
-    // УДАЛЕНИЕ КОНКРЕТНОГО КОНТРАГЕНТА
-    removeContractor(contractorId) {
-        console.log('🗑️ Удаление контрагента:', contractorId);
+        this.allContractors = this.allContractors.filter(c => c.id !== contractorId);
         this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
+        this.saveContractors();
         this.updateSelectedContractorsUI();
-        this.updateButtonStates();
-        this.updateSessionStatus();
-        this.saveSelectedContractors();
+        this.loadContractorsManagerList();
+        showWarning('Контрагент удален', 3000);
     }
 
-    // ОЧИСТКА ВСЕХ КОНТРАГЕНТОВ
-    clearContractors() {
-        console.log('🧹 Очистка всех контрагентов');
-        this.selectedContractors = [];
-        this.updateSelectedContractorsUI();
-        this.updateButtonStates();
-        this.updateSessionStatus();
-        this.saveSelectedContractors();
-        this.hideDropdown();
-    }
-
-    // СОХРАНЕНИЕ ВЫБРАННЫХ КОНТРАГЕНТОВ
-    saveSelectedContractors() {
+    // КАМЕРА И СКАНИРОВАНИЕ
+    async checkCameraAvailability() {
         try {
-            const data = {
-                contractorIds: this.selectedContractors.map(c => c.id),
-                timestamp: new Date().toISOString(),
-                contractorNames: this.selectedContractors.map(c => c.name) // для отладки
-            };
-            
-            console.log('💾 Сохранение выбранных контрагентов:', data);
-            localStorage.setItem('honest_sign_selected_contractors', JSON.stringify(data));
-            
-            // ОБНОВЛЯЕМ СЕССИЮ
-            if (this.selectedContractors.length > 0) {
-                appState.startNewSession(this.selectedContractors.map(c => c.id));
+            if (!navigator.mediaDevices) {
+                console.warn('⚠️ mediaDevices не поддерживается');
+                return false;
             }
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const cameras = devices.filter(device => device.kind === 'videoinput');
+            console.log(`📸 Найдено камер: ${cameras.length}`);
             
+            return cameras.length > 0;
         } catch (error) {
-            console.error('❌ Ошибка сохранения выбранных контрагентов:', error);
+            console.error('❌ Ошибка проверки камеры:', error);
+            return false;
         }
     }
 
-    // НОВЫЙ МЕТОД: Детальная проверка процесса сохранения
-    debugSaveProcess() {
-        console.log('🔍 ДЕТАЛЬНАЯ ДИАГНОСТИКА СОХРАНЕНИЯ:');
-        
-        // Проверяем текущее состояние
-        console.log('1. Текущие контрагенты в памяти:', this.allContractors);
-        console.log('2. Количество контрагентов:', this.allContractors.length);
-        
-        // Проверяем localStorage до сохранения
-        const beforeSave = localStorage.getItem('honest_sign_contractors');
-        console.log('3. Данные в localStorage ДО сохранения:', beforeSave ? `Есть (${beforeSave.length} символов)` : '❌ Пусто');
-        
-        // Пробуем сохранить
-        try {
-            const testData = JSON.stringify(this.allContractors);
-            console.log('4. JSON для сохранения:', testData);
-            
-            localStorage.setItem('honest_sign_contractors', testData);
-            
-            // Проверяем после сохранения
-            const afterSave = localStorage.getItem('honest_sign_contractors');
-            console.log('5. Данные в localStorage ПОСЛЕ сохранения:', afterSave ? `Есть (${afterSave.length} символов)` : '❌ Пусто');
-            
-            console.log('6. Сохранение успешно:', beforeSave !== afterSave ? '✅ Да' : '❌ Нет');
-            
-            if (afterSave) {
-                try {
-                    const parsed = JSON.parse(afterSave);
-                    console.log('7. Проверка парсинга:', Array.isArray(parsed) ? `✅ Массив из ${parsed.length} элементов` : '❌ Не массив');
-                } catch (parseError) {
-                    console.log('7. ❌ Ошибка парсинга сохраненных данных:', parseError);
-                }
-            }
-            
-            // Показываем в консоли отладки
-            if (typeof addToConsole === 'function') {
-                addToConsole('<strong>🔍 РЕЗУЛЬТАТЫ ДИАГНОСТИКИ:</strong>');
-                addToConsole(`• Контрагентов в памяти: ${this.allContractors.length}`);
-                addToConsole(`• Данные в хранилище: ${afterSave ? '✅ Есть' : '❌ Нет'}`);
-                addToConsole(`• Сохранение успешно: ${beforeSave !== afterSave ? '✅ Да' : '❌ Нет'}`);
-            }
-            
-        } catch (error) {
-            console.error('8. ❌ Ошибка при тестовом сохранении:', error);
-            if (typeof addToConsole === 'function') {
-                addToConsole(`❌ Ошибка сохранения: ${error.message}`);
-            }
-        }
-    }
-    // ПОКАЗ/СКРЫТИЕ ВЫПАДАЮЩЕГО СПИСКА
-    showDropdown() {
-        const dropdown = document.getElementById('contractorDropdown');
-        if (dropdown) {
-            dropdown.classList.remove('hidden');
-        }
-    }
-
-    hideDropdown() {
-        const dropdown = document.getElementById('contractorDropdown');
-        if (dropdown) {
-            dropdown.classList.add('hidden');
-        }
-    }
-
-    debugContractors() {
-        console.log('🐛 ОТЛАДКА КОНТРАГЕНТОВ:');
-        console.log('- allContractors:', this.allContractors);
-        console.log('- selectedContractors:', this.selectedContractors);
-        console.log('- localStorage contractors:', localStorage.getItem('honest_sign_contractors'));
-        console.log('- localStorage selected:', localStorage.getItem('honest_sign_selected_contractors'));
-        
-        // Показываем информацию в интерфейсе
-        showInfo(`
-            Всего контрагентов: ${this.allContractors.length}
-            Выбрано: ${this.selectedContractors.length}
-            В хранилище: ${localStorage.getItem('honest_sign_contractors') ? 'есть' : 'нет'}
-        `, 5000);
-    }
-
-    // ОБНОВЛЕНИЕ СТАТУСА СЕССИИ
-    updateSessionStatus() {
-        const session = appState.getCurrentSession();
-        const statusCard = document.getElementById('sessionStatus');
-        
-        if (this.selectedContractors.length === 0) {
-            statusCard.classList.add('hidden');
-            return;
-        }
-        
-        statusCard.classList.remove('hidden');
-        document.getElementById('currentContractor').textContent = 
-            this.selectedContractors.map(c => c.name).join(', ');
-        document.getElementById('codesCount').textContent = session.scannedCodes.length;
-        document.getElementById('sessionId').textContent = session.id;
-    }
-
-    // ОБНОВЛЕНИЕ СОСТОЯНИЯ КНОПОК
-    updateButtonStates() {
-        const hasContractors = this.selectedContractors.length > 0;
-        const hasCodes = appState.getCurrentSession().scannedCodes.length > 0;
-        
-        document.getElementById('startCamera').disabled = !hasContractors;
-        document.getElementById('generateReport').disabled = !hasContractors || !hasCodes;
-        
-        console.log('🔄 Состояние кнопок обновлено:', { hasContractors, hasCodes });
-    }
-
-    // УЛУЧШЕННЫЙ ЗАПУСК КАМЕРЫ ДЛЯ CHROME ANDROID
     async startCamera() {
-        console.log('📷 Запускаем улучшенную камеру...');
-        
         if (this.isScanning) {
             console.log('⚠️ Камера уже запущена');
             return;
         }
-    
+
         if (this.selectedContractors.length === 0) {
             showError('❌ Сначала выберите контрагентов');
             return;
         }
-    
+
         try {
-            // ПРОВЕРЯЕМ БРАУЗЕР
-            const isChromeAndroid = /Chrome/.test(navigator.userAgent) && /Android/.test(navigator.userAgent);
-            console.log('🌐 Браузер:', navigator.userAgent);
-            console.log('📱 Chrome на Android:', isChromeAndroid);
-    
-            // ПРОВЕРЯЕМ ДОСТУПНОСТЬ БИБЛИОТЕКИ
-            if (typeof Html5Qrcode === 'undefined') {
-                await loadHtml5QrCode();
-            }
-    
             // Останавливаем предыдущую камеру
             await this.stopCamera();
-    
-            const container = document.getElementById('reader');
-            if (!container) {
-                throw new Error('Контейнер для камеры не найден');
+
+            // Проверяем библиотеку
+            if (typeof Html5Qrcode === 'undefined') {
+                await this.loadHtml5QrCode();
             }
-    
-            // ОЧИЩАЕМ КОНТЕЙНЕР
+
+            const container = document.getElementById('reader');
+            if (!container) throw new Error('Контейнер не найден');
+
+            // Очищаем контейнер
             container.innerHTML = '';
             
             this.scanner = new Html5Qrcode("reader");
             
-            // УЛУЧШЕННАЯ КОНФИГУРАЦИЯ ДЛЯ ЛУЧШЕГО СКАНИРОВАНИЯ
             const config = {
-                fps: 10, // Уменьшите для стабильности
-                qrbox: { width: 250, height: 250 }, // Уменьшите область сканирования
-                aspectRatio: 1.0,
-                supportedScanTypes: [
-                    Html5QrcodeScanType.SCAN_TYPE_QR_CODE,
-                    Html5QrcodeScanType.SCAN_TYPE_DATAMATRIX
-                ],
-                // Упрощенные настройки видео
-                videoConstraints: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: "environment",
-                    frameRate: { ideal: 20 }
-                }
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0
             };
-    
-            console.log('🎯 Начинаем запуск улучшенной камеры...');
-    
-            let cameraStarted = false;
-            let lastError = null;
-    
-            // РАСШИРЕННЫЙ СПИСОК СТРАТЕГИЙ ДЛЯ ЛУЧШЕГО СКАНИРОВАНИЯ
-            const cameraConfigs = [
-                // Основные стратегии
-                { facingMode: "environment", description: "Задняя камера (основная)" },
-                { facingMode: "user", description: "Передняя камера" },
-                
-                // С разными настройками качества
-                { 
-                    facingMode: "environment", 
-                    description: "Задняя камера (высокое качество)",
-                    advanced: {
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        frameRate: { ideal: 30 }
-                    }
+
+            await this.scanner.start(
+                { facingMode: "environment" },
+                config,
+                (decodedText) => {
+                    console.log('✅ QR-код распознан:', decodedText);
+                    this.onScanSuccess(decodedText);
                 },
-                { 
-                    facingMode: "environment",
-                    description: "Задняя камера (баланс)",
-                    advanced: {
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }, 
-                        frameRate: { ideal: 25 }
+                (error) => {
+                    // Игнорируем ошибки сканирования
+                    if (!error.includes('NotFoundException')) {
+                        console.log('📷 Ошибка сканирования:', error);
                     }
                 }
-            ];
-    
-            // ДОБАВЛЯЕМ КОНКРЕТНЫЕ КАМЕРЫ ИЗ УСТРОЙСТВА
-            if (isChromeAndroid) {
-                try {
-                    const devices = await Html5Qrcode.getCameras();
-                    console.log('📸 Доступные камеры:', devices);
-                    
-                    devices.forEach(device => {
-                        cameraConfigs.push({
-                            deviceId: device.id,
-                            description: `Камера: ${device.label || device.id}`
-                        });
-                    });
-                } catch (error) {
-                    console.log('⚠️ Не удалось получить список камер:', error);
-                }
-            }
-    
-            // ПРОБУЕМ ВСЕ ВАРИАНТЫ С УЛУЧШЕННОЙ ОБРАБОТКОЙ
-            for (let i = 0; i < cameraConfigs.length; i++) {
-                const cameraConfig = cameraConfigs[i];
-                console.log(`🔄 Попытка ${i + 1}: ${cameraConfig.description}`);
-                
-                try {
-                    let scanConfig = { ...config };
-                    
-                    // Добавляем расширенные настройки если есть
-                    if (cameraConfig.advanced) {
-                        scanConfig.videoConstraints = { 
-                            ...scanConfig.videoConstraints,
-                            ...cameraConfig.advanced
-                        };
-                    }
-    
-                    // УЛУЧШЕННЫЙ ОБРАБОТЧИК СКАНИРОВАНИЯ
-                    const onScanSuccess = (decodedText, decodedResult) => {
-                        console.log('✅ QR-код распознан:', decodedText);
-                        console.log('📊 Детали сканирования:', decodedResult);
-                        
-                        // ДОБАВЛЯЕМ ПРОВЕРКУ КАЧЕСТВА СКАНИРОВАНИЯ
-                        if (this.isValidQRCode(decodedText)) {
-                            this.onScanSuccess(decodedText);
-                        } else {
-                            console.log('⚠️ Сомнительный QR-код, пропускаем...');
-                        }
-                    };
-    
-                    const onScanFailure = (error) => {
-                        // УМЕНЬШАЕМ ЛОГИРОВАНИЕ ОШИБОК СКАНИРОВАНИЯ
-                        if (!error.includes('NotFoundException')) {
-                            console.log('📷 Ошибка сканирования:', error);
-                        }
-                    };
-    
-                    if (cameraConfig.deviceId) {
-                        await this.scanner.start(
-                            cameraConfig.deviceId,
-                            scanConfig,
-                            onScanSuccess,
-                            onScanFailure
-                        );
-                    } else {
-                        await this.scanner.start(
-                            { facingMode: cameraConfig.facingMode },
-                            scanConfig, 
-                            onScanSuccess,
-                            onScanFailure
-                        );
-                    }
-                    
-                    cameraStarted = true;
-                    console.log(`✅ Успех: ${cameraConfig.description}`);
-                    
-                    // ПОКАЗЫВАЕМ ПОДСКАЗКИ ДЛЯ ЛУЧШЕГО СКАНИРОВАНИЯ
-                    this.showScanningTips();
-                    break;
-                    
-                } catch (error) {
-                    lastError = error;
-                    console.log(`❌ Не удалось: ${cameraConfig.description}`, error.message);
-                    
-                    // ОСТАНАВЛИВАЕМ ПРЕДЫДУЩУЮ ПОПЫТКУ
-                    if (this.scanner) {
-                        try {
-                            await this.scanner.stop();
-                        } catch (e) {
-                            // Игнорируем ошибки остановки
-                        }
-                    }
-                    
-                    // УВЕЛИЧИВАЕМ ПАУЗУ МЕЖДУ ПОПЫТКАМИ
-                    await new Promise(resolve => setTimeout(resolve, 800));
-                }
-            }
-    
-            if (cameraStarted) {
-                this.isScanning = true;
-                
-                // ОБНОВЛЯЕМ ИНТЕРФЕЙС
-                document.getElementById('startCamera').classList.add('hidden');
-                document.getElementById('stopCamera').classList.remove('hidden');
-                
-                // СКРЫВАЕМ ПЛЕЙСХОЛДЕР
-                this.hideScannerPlaceholder();
-                
-                console.log('🎉 Улучшенная камера успешно запущена!');
-                showSuccess('📷 Камера запущена! Наведите на QR-код при хорошем освещении', 4000);
-                
-            } else {
-                throw lastError || new Error('Не удалось запустить ни одну камеру');
-            }
-    
+            );
+
+            this.isScanning = true;
+            this.updateCameraUI();
+            showSuccess('📷 Камера запущена!', 3000);
+
         } catch (error) {
-            console.error('❌ Финальная ошибка запуска камеры:', error);
-            
-            let message = this.getCameraErrorMessage(error);
-            showError(message);
-            
+            console.error('❌ Ошибка запуска камеры:', error);
+            showError(`Ошибка камеры: ${error.message}`);
             this.showSimulator();
         }
     }
 
-    // ОПТИМИЗАЦИЯ ДЛЯ APK
-    optimizeForAPK() {
-        console.log('📱 Оптимизация для APK приложения');
-        
-        // Определяем, что мы в APK
-        const isInAPK = !window.location.protocol.startsWith('http');
-        const isWebView = /WebView|Android/.test(navigator.userAgent);
-        
-        if (isInAPK || isWebView) {
-            console.log('🎯 Запущено в APK/WebView, применяем оптимизации');
-            
-            // Улучшаем стабильность камеры
-            this.apkMode = true;
-            
-            // Добавляем APK-специфичные улучшения
-            this.addAPKEnhancements();
-        }
-    }
-
-    addAPKEnhancements() {
-        // Улучшенный обработчик для APK
-        document.addEventListener('pause', () => {
-            console.log('📱 APK: Приложение ушло в фон');
-            this.stopCamera();
-        });
-
-        // APK-СПЕЦИФИЧНЫЕ УЛУЧШЕНИЯ
-        document.addEventListener('deviceready', function() {
-            console.log('📱 Cordova/APK устройство готово');
-            if (window.scannerManager) {
-                scannerManager.apkMode = true;
-                showSuccess('📱 APK режим активирован', 3000);
-            }
-        }, false);
-
-        // Обнаружение APK окружения
-        if (window.cordova || window.Capacitor) {
-            console.log('🎯 Обнаружена APK платформа');
-            document.addEventListener('DOMContentLoaded', function() {
-                setTimeout(() => {
-                    if (window.scannerManager) {
-                        scannerManager.apkMode = true;
-                        scannerManager.addAPKEnhancements();
-                    }
-                }, 1000);
-            });
-        }
-        
-        document.addEventListener('resume', () => {
-            console.log('📱 APK: Приложение вернулось');
-            setTimeout(() => {
-                if (this.selectedContractors.length > 0) {
-                    this.startCamera();
-                }
-            }, 1000);
-        });
-        
-        // Улучшаем обработку касаний для WebView
-        document.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 1) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-    }
-
-    // УЛУЧШЕННЫЙ ЗАПУСК КАМЕРЫ ДЛЯ APK
-    async startCameraAPK() {
-        console.log('📱 Запуск камеры в APK режиме');
-        
-        try {
-            // Останавливаем предыдущую камеру
-            await this.stopCamera();
-            
-            // Даем время на очистку
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            const config = {
-                fps: 15,
-                qrbox: { width: 280, height: 280 },
-                aspectRatio: 1.0,
-                supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_QR_CODE],
-                videoConstraints: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 },
-                    facingMode: "environment",
-                    frameRate: { ideal: 30 }
-                }
-            };
-            
-            this.scanner = new Html5Qrcode("reader");
-            
-            // Пробуем разные стратегии запуска для APK
-            const cameraStrategies = [
-                { facingMode: "environment" },
-                { facingMode: "user" },
-                { exact: "environment" }
-            ];
-            
-            for (let strategy of cameraStrategies) {
-                try {
-                    console.log(`🔄 APK: Пробуем стратегию ${JSON.stringify(strategy)}`);
-                    
-                    await this.scanner.start(
-                        strategy,
-                        config,
-                        (decodedText) => {
-                            console.log('✅ APK: QR-код распознан:', decodedText);
-                            this.onScanSuccess(decodedText);
-                        },
-                        (error) => {
-                            // Игнорируем ошибки сканирования, но логируем
-                            if (!error.includes('No QR code found')) {
-                                console.log('📱 APK: Ошибка сканирования:', error);
-                            }
-                        }
-                    );
-                    
-                    // Если дошли сюда - камера запущена
-                    this.isScanning = true;
-                    this.showCameraUI();
-                    console.log('🎉 APK: Камера успешно запущена!');
-                    showSuccess('📷 Камера запущена в APK режиме', 2000);
-                    return;
-                    
-                } catch (error) {
-                    console.log(`❌ APK: Стратегия не сработала:`, error.message);
-                    if (this.scanner) {
-                        await this.scanner.stop();
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 300));
-                }
-            }
-            
-            throw new Error('Все стратегии запуска не сработали');
-            
-        } catch (error) {
-            console.error('❌ APK: Критическая ошибка камеры:', error);
-            this.showAPKCameraError(error);
-        }
-    }
-
-    showCameraUI() {
-        document.getElementById('startCamera').classList.add('hidden');
-        document.getElementById('stopCamera').classList.remove('hidden');
-        this.hideScannerPlaceholder();
-    }
-
-    showAPKCameraError(error) {
-        let message = '📷 Ошибка камеры в APK\n\n';
-        
-        if (error.message.includes('NotAllowedError')) {
-            message += 'Разрешите доступ к камере в настройках Android:\n';
-            message += 'Настройки → Приложения → Ваше приложение → Разрешения → Камера';
-        } else if (error.message.includes('NotFoundError')) {
-            message += 'Камера не найдена. Убедитесь, что устройство имеет камеру';
-        } else {
-            message += `Ошибка: ${error.message}`;
-        }
-        
-        showError(message, 6000);
-        this.showSimulator();
-    }
-
-    // СКРЫТИЕ ПЛЕЙСХОЛДЕРА
-    hideScannerPlaceholder() {
-        const overlay = document.querySelector('.scanner-overlay');
-        if (overlay) {
-            overlay.style.display = 'none';
-        }
-    }
-
-    // ПОКАЗ ПЛЕЙСХОЛДЕРА
-    showScannerPlaceholder() {
-        const overlay = document.querySelector('.scanner-overlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-        }
-    }
-
-    // ПОЛУЧЕНИЕ ЧЕЛОВЕКО-ЧИТАЕМОГО СООБЩЕНИЯ ОБ ОШИБКЕ
-    getCameraErrorMessage(error) {
-        if (error.message.includes('NotAllowedError')) {
-            return `📷 Доступ к камере запрещен
-
-Для разрешения доступа:
-1. Нажмите на значок 🔒 в адресной строке
-2. Выберите "Разрешить доступ к камере" 
-3. Перезагрузите страницу
-
-Или в настройках Chrome:
-• Настройки → Конфиденциальность → Настройки сайта → Камера
-• Разрешите доступ для этого сайта`;
-                        
-        } else if (error.message.includes('NotFoundError')) {
-            return '📷 Камера не найдена на устройстве';
-            
-        } else if (error.message.includes('NotSupportedError')) {
-            return '📷 Ваш браузер не поддерживает сканирование QR-кодов';
-            
-        } else if (error.message.includes('NotReadableError')) {
-            return `📷 Камера занята другим приложением
-
-Закройте другие приложения, использующие камеру:
-• Другие браузеры
-• Приложения камеры
-• Видео-приложения`;
-                        
-        } else if (error.message.includes('OverconstrainedError')) {
-            return '📷 Запрошенные настройки камеры не поддерживаются';
-            
-        } else {
-            return `📷 Ошибка камеры: ${error.message}`;
-        }
-    }
-
     async stopCamera() {
-        if (this._stopInProgress) {
-            console.log('⚠️ Остановка камеры уже выполняется...');
-            return;
-        }
+        if (this._stopInProgress) return;
         
-        if (this._cleanupTimeout) {
-            clearTimeout(this._cleanupTimeout);
-            this._cleanupTimeout = null;
-        }
-
-        console.log('🧹 Начинаем полную очистку камеры...');
-        
-        // ФЛАГ ОЧИСТКИ
-        this.cleaningUp = true;
         this._stopInProgress = true;
 
         try {
-            // 1. ОСТАНАВЛИВАЕМ СКАНЕР
             if (this.scanner) {
-                console.log('🛑 Останавливаем сканер...');
-                try {
-                    await this.scanner.stop();
-                } catch (error) {
-                    console.log('⚠️ Мягкая остановка не сработала:', error.message);
-                }
-                
-                // ОЧИЩАЕМ ССЫЛКУ
+                await this.scanner.stop();
                 this.scanner = null;
             }
-            
-            // 2. ОСТАНАВЛИВАЕМ ВСЕ ВИДЕО ПОТОКИ
-            console.log('🎥 Останавливаем все видео потоки...');
-            const videos = document.querySelectorAll('video');
-            videos.forEach(video => {
-                try {
-                    video.pause();
-                    video.srcObject = null;
-                    video.load();
-                } catch (e) {
-                    console.log('⚠️ Ошибка остановки видео:', e);
-                }
-            });
-            
-            // 3. ОЧИЩАЕМ КОНТЕЙНЕР
-            console.log('🗑️ Очищаем контейнер...');
+
+            // Очищаем контейнер
             const container = document.getElementById('reader');
             if (container) {
-                const overlay = container.querySelector('.scanner-overlay');
-                container.innerHTML = '';
-                
-                if (overlay) {
-                    container.appendChild(overlay);
-                    overlay.style.display = 'flex';
-                } else {
-                    container.innerHTML = `
-                        <div class="scanner-overlay">
-                            <span class="placeholder-icon">📷</span>
-                            <p>Камера остановлена. Нажмите "Включить камеру"</p>
-                            <div class="scanner-frame"></div>
-                        </div>
-                    `;
-                }
+                container.innerHTML = `
+                    <div class="scanner-overlay">
+                        <span class="placeholder-icon">📷</span>
+                        <p>Камера остановлена</p>
+                        <div class="scanner-frame"></div>
+                    </div>
+                `;
             }
-            
-            // 4. СБРАСЫВАЕМ СОСТОЯНИЕ
+
             this.isScanning = false;
-            this.scanner = null;
-            
-            // 5. ОБНОВЛЯЕМ ИНТЕРФЕЙС
-            document.getElementById('startCamera').classList.remove('hidden');
-            document.getElementById('stopCamera').classList.add('hidden');
-            
-            console.log('✅ Камера полностью очищена');
+            this.updateCameraUI();
             
         } catch (error) {
-            console.error('❌ Критическая ошибка при очистке камеры:', error);
+            console.error('❌ Ошибка остановки камеры:', error);
         } finally {
-            this.cleaningUp = false;
             this._stopInProgress = false;
         }
     }
 
-    // ПРОВЕРКА ВАЛИДНОСТИ QR-КОДА
-    isValidQRCode(decodedText) {
-        if (!decodedText || decodedText.length < 10) {
-            console.log('⚠️ Слишком короткий код');
-            return false;
-        }
+    updateCameraUI() {
+        const startBtn = document.getElementById('startCamera');
+        const stopBtn = document.getElementById('stopCamera');
         
-        // Проверяем формат кодов "Честного знака"
-        if (decodedText.startsWith('01') && decodedText.length >= 20) {
-            return true;
-        }
-        
-        // Проверяем тестовые коды
-        if (decodedText.includes('TEST')) {
-            return true;
-        }
-        
-        // Допускаем другие форматы (может быть простой текст)
-        console.log('📝 Распознан код:', decodedText.substring(0, 50) + '...');
-        return true;
-    }
-
-    // ПОКАЗ ПОДСКАЗОК ДЛЯ ЛУЧШЕГО СКАНИРОВАНИЯ
-    showScanningTips() {
-        const tipsHtml = `
-            <div class="scanning-tips">
-                <h4>💡 Советы для лучшего сканирования:</h4>
-                <ul>
-                    <li>🔆 Хорошее освещение</li>
-                    <li>📏 Код должен быть в рамке</li>
-                    <li>⚡ Избегайте бликов</li>
-                    <li>📱 Держите телефон steady</li>
-                </ul>
-            </div>
-        `;
-        
-        const scannerContainer = document.getElementById('scannerContainer');
-        if (scannerContainer && !document.querySelector('.scanning-tips')) {
-            const tipsElement = document.createElement('div');
-            tipsElement.className = 'scanning-tips';
-            tipsElement.innerHTML = tipsHtml;
-            scannerContainer.appendChild(tipsElement);
+        if (this.isScanning) {
+            if (startBtn) startBtn.classList.add('hidden');
+            if (stopBtn) stopBtn.classList.remove('hidden');
+        } else {
+            if (startBtn) startBtn.classList.remove('hidden');
+            if (stopBtn) stopBtn.classList.add('hidden');
         }
     }
 
-    // ОБРАБОТКА УСПЕШНОГО СКАНИРОВАНИЯ
     onScanSuccess(decodedText) {
         if (this.selectedContractors.length === 0) {
             showError('❌ Сначала выберите контрагентов');
             return;
         }
-    
-        if (appState.hasCodeBeenScanned(decodedText)) {
+
+        // Проверяем дубликаты через appState
+        if (appState && appState.hasCodeBeenScanned(decodedText)) {
             showWarning('⚠️ Этот код уже отсканирован');
             return;
         }
-    
+
         const scannedCode = {
             code: decodedText,
             timestamp: new Date().toISOString(),
             contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
         };
         
-        appState.addScannedCode(decodedText);
+        // Сохраняем через appState
+        if (appState) {
+            appState.addScannedCode(decodedText);
+        }
+        
         this.addCodeToList(scannedCode);
         this.updateUI();
         
-        // ВИБРАЦИЯ ПРИ УСПЕШНОМ СКАНИРОВАНИИ (если доступно)
-        if (navigator.vibrate) {
-            navigator.vibrate(200);
-        }
-        
-        showSuccess(`✅ Код добавлен для ${this.selectedContractors.length} контрагентов`, 2000);
-        
-        // АВТОФОКУС НА СЛЕДУЮЩИЙ КОД (если нужно сканировать несколько)
-        setTimeout(() => {
-            if (this.isScanning) {
-                console.log('🔍 Готов к сканированию следующего кода...');
-            }
-        }, 500);
+        showSuccess(`✅ Код добавлен`, 2000);
     }
 
-    // ДОБАВЛЕНИЕ КОДА В СПИСОК
     addCodeToList(scannedCode) {
         const codesList = document.getElementById('codesList');
         const emptyState = codesList.querySelector('.empty-state');
+        
         if (emptyState) {
             emptyState.remove();
         }
@@ -1606,353 +557,46 @@ class ScannerManager {
     }
 
     formatCode(code) {
-        if (code.length > 25) {
-            return code.substring(0, 15) + '...' + code.substring(code.length - 10);
-        }
-        return code;
+        return code.length > 25 
+            ? code.substring(0, 15) + '...' + code.substring(code.length - 10)
+            : code;
     }
 
-    // УДАЛЕНИЕ КОДА
     removeCode(code) {
-        appState.removeScannedCode(code);
+        if (appState) {
+            appState.removeScannedCode(code);
+        }
         this.updateUI();
         showWarning('Код удален', 2000);
     }
 
-    // ОБНОВЛЕНИЕ ИНТЕРФЕЙСА
-    updateUI() {
-        const codesCount = appState.getCurrentSession().scannedCodes.length;
-        document.getElementById('totalCodes').textContent = codesCount;
-        document.getElementById('codesCount').textContent = codesCount;
-        
-        this.updateButtonStates();
-        this.updateSessionStatus();
-        this.updateCodesList();
-    }
-
-    updateCodesList() {
-        const codesList = document.getElementById('codesList');
-        const codes = appState.getCurrentSession().scannedCodes;
-        
-        if (codes.length === 0) {
-            codesList.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">📦</span>
-                    <p>Нет отсканированных кодов</p>
-                    <small>Начните сканирование или используйте симулятор</small>
-                </div>
-            `;
+    // СИМУЛЯТОР
+    showSimulator() {
+        const simulator = document.getElementById('simulator');
+        if (simulator) {
+            simulator.classList.remove('hidden');
         }
     }
 
-    // ПОДКЛЮЧЕНИЕ ОБРАБОТЧИКОВ СОБЫТИЙ
-    attachEventListeners() {
-        console.log('🔧 Подключаем обработчики событий для APK (index.html)');
-        
-        // Используем делегирование событий для надежности в APK
-        document.addEventListener('click', (e) => {
-            const target = e.target;
-            console.log('🖱️ Клик по:', target.id || target.className);
-            
-            // Обработка кнопок через делегирование
-            if (target.id === 'startCamera' || target.closest('#startCamera')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('📷 Запуск камеры');
-                this.startCamera();
-            }
-            else if (target.id === 'stopCamera' || target.closest('#stopCamera')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🛑 Остановка камеры');
-                this.stopCamera();
-            }
-            else if (target.id === 'showSimulator' || target.closest('#showSimulator')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🧪 Показать симулятор');
-                this.showSimulator();
-            }
-            else if (target.id === 'generateReport' || target.closest('#generateReport')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('📄 Генерация отчета');
-                this.generateReport();
-            }
-            else if (target.id === 'clearSession' || target.closest('#clearSession')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🗑️ Очистка сессии');
-                this.clearSession();
-            }
-            else if (target.id === 'addManualContractorBtn' || target.closest('#addManualContractorBtn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('➕ Добавление контрагента вручную');
-                this.showAddContractorForm();
-            }
-            else if (target.id === 'importContractorsBtn' || target.closest('#importContractorsBtn')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('📥 Импорт контрагентов');
-                this.showImportForm();
-            }
-            // ДОБАВЛЕНО: Главная кнопка открытия менеджера контрагентов
-            else if (target.closest('[data-action="showContractorManager"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('👥 Открытие менеджера контрагентов');
-                this.showContractorManager();
-            }
-            // ДОБАВЛЕНО: Обработка кнопок отмены в формах
-            else if (target.closest('[data-action="hideAddContractorForm"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('❌ Отмена добавления контрагента');
-                this.hideAddContractorForm();
-            }
-            else if (target.closest('[data-action="hideImportForm"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('❌ Отмена импорта');
-                this.hideImportForm();
-            }
-            else if (target.closest('[data-action="hideContractorManager"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('👥 Закрытие менеджера контрагентов');
-                this.hideContractorManager();
-            }
-            // ДОБАВЛЕНО: Очистка всех контрагентов
-            else if (target.closest('[data-action="clearContractors"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🧹 Очистка всех контрагентов');
-                this.clearContractors();
-            }
-            // ДОБАВЛЕНО: Добавление контрагента
-            else if (target.closest('[data-action="addContractor"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('✅ Добавление контрагента');
-                this.addContractor();
-            }
-            // ДОБАВЛЕНО: Импорт контрагентов
-            else if (target.closest('[data-action="importContractors"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('📥 Импорт контрагентов из формы');
-                this.importContractors();
-            }
-            // ДОБАВЛЕНО: Экспорт контрагентов
-            else if (target.closest('[data-action="exportContractors"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('📤 Экспорт контрагентов');
-                this.exportContractors();
-            }
-            // Обработка кнопок в модальном окне управления контрагентами
-            else if (target.id === 'refreshReports' || target.closest('#refreshReports')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🔄 Обновление отчетов');
-                this.loadReportsList();
-            }
-            else if (target.id === 'deleteAllPending' || target.closest('#deleteAllPending')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🗑️ Удаление всех отчетов');
-                this.deleteAllPendingReports();
-            }
-            // ДОБАВЛЕНО: Закрытие по клику вне модального окна
-            else if (target.id === 'contractorManager' || target.classList.contains('modal-overlay')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🎯 Закрытие по клику вне модального окна');
-                this.hideContractorManager();
-            }
-        });
-    
-        // Дополнительные обработчики для надежности
-        this.setupRobustEventHandlers();
-        
-        console.log('✅ Обработчики событий подключены для index.html');
+    hideSimulator() {
+        const simulator = document.getElementById('simulator');
+        if (simulator) {
+            simulator.classList.add('hidden');
+        }
     }
 
-    // ЗАГРУЗКА СПИСКА ОТЧЕТОВ
-    loadReportsList() {
-        console.log('📊 Загружаем список отчетов');
-        const reports = appState.getAllReports();
-        const container = document.getElementById('reportsList');
-        
-        if (!container) {
-            console.error('❌ Контейнер отчетов не найден');
+    simulateScan(code) {
+        console.log('🧪 Симуляция сканирования:', code);
+        this.onScanSuccess(code);
+    }
+
+    // ОТЧЕТЫ
+    generateReport() {
+        if (!appState) {
+            showError('❌ AppState не доступен');
             return;
         }
-        
-        if (reports.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <span class="empty-icon">📄</span>
-                    <p>Нет отправленных отчетов</p>
-                    <small>Созданные отчеты появятся здесь</small>
-                </div>
-            `;
-            return;
-        }
-        
-        container.innerHTML = reports.map(report => `
-            <div class="report-item">
-                <div class="report-info">
-                    <div class="report-header">
-                        <strong>${report.contractorName}</strong>
-                        <span class="report-status ${report.status}">${this.getStatusText(report.status)}</span>
-                    </div>
-                    <div class="report-details">
-                        <span>Кодов: ${report.codes.length}</span>
-                        <span>${new Date(report.createdAt).toLocaleString('ru-RU')}</span>
-                    </div>
-                </div>
-                <div class="report-actions">
-                    <button class="btn btn-sm btn-outline" onclick="scannerManager.downloadReport(${report.id})">
-                        📥 Скачать
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="scannerManager.deleteReport(${report.id})">
-                        🗑️ Удалить
-                    </button>
-                </div>
-            </div>
-        `).join('');
-    }
 
-    getStatusText(status) {
-        const statusMap = {
-            'pending': '⏳ Ожидает',
-            'processed': '✅ Обработан', 
-            'error': '❌ Ошибка'
-        };
-        return statusMap[status] || status;
-    }
-
-    // УДАЛЕНИЕ ВСЕХ ОТЧЕТОВ
-    deleteAllPendingReports() {
-        if (confirm('Удалить все необработанные отчеты?')) {
-            appState.deleteAllReports();
-            this.loadReportsList();
-            showSuccess('🗑️ Все отчеты удалены', 3000);
-        }
-    }
-
-    // СКАЧИВАНИЕ ОТЧЕТА
-    downloadReport(reportId) {
-        const report = appState.getReport(reportId);
-        if (report) {
-            // Здесь будет логика генерации PDF
-            showInfo('📥 Функция скачивания в разработке', 3000);
-        }
-    }
-
-    // УДАЛЕНИЕ ОТЧЕТА
-    deleteReport(reportId) {
-        if (confirm('Удалить этот отчет?')) {
-            appState.deleteReport(reportId);
-            this.loadReportsList();
-            showWarning('🗑️ Отчет удален', 3000);
-        }
-    }
-    
-    // метод для надежных обработчиков
-    setupRobustEventHandlers() {
-        // Дублируем основные обработчики для APK
-        const buttons = [
-            { id: 'startCamera', method: 'startCamera' },
-            { id: 'stopCamera', method: 'stopCamera' },
-            { id: 'showSimulator', method: 'showSimulator' },
-            { id: 'generateReport', method: 'generateReport' },
-            { id: 'clearSession', method: 'clearSession' },
-            { id: 'addManualContractorBtn', method: 'showAddContractorForm' },
-            { id: 'importContractorsBtn', method: 'showImportForm' }
-        ];
-        
-        buttons.forEach(btn => {
-            const element = document.getElementById(btn.id);
-            if (element) {
-                // Удаляем старые обработчики
-                element.replaceWith(element.cloneNode(true));
-                const newElement = document.getElementById(btn.id);
-                
-                // Добавляем новые
-                newElement.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`🎯 Кнопка ${btn.id} нажата`);
-                    this[btn.method]();
-                });
-            }
-        });
-    
-        // ДОБАВЛЕНО: Обработчики для кнопок управления контрагентами
-        const contractorButtons = [
-            { selector: '[data-action="showContractorManager"]', method: 'showContractorManager' },
-            { selector: '[data-action="hideAddContractorForm"]', method: 'hideAddContractorForm' },
-            { selector: '[data-action="hideImportForm"]', method: 'hideImportForm' },
-            { selector: '[data-action="hideContractorManager"]', method: 'hideContractorManager' },
-            { selector: '[data-action="clearContractors"]', method: 'clearContractors' }
-        ];
-    
-        contractorButtons.forEach(btn => {
-            const elements = document.querySelectorAll(btn.selector);
-            elements.forEach(element => {
-                element.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log(`🎯 ${btn.method} вызван`);
-                    this[btn.method]();
-                });
-            });
-        });
-    }
-
-    // ВОССТАНОВЛЕНИЕ СЕССИИ
-    checkExistingSession() {
-        try {
-            console.log('🔄 Восстановление сессии...');
-            
-            // ВОССТАНАВЛИВАЕМ ВЫБРАННЫХ КОНТРАГЕНТОВ
-            const saved = JSON.parse(localStorage.getItem('honest_sign_selected_contractors') || '{}');
-            console.log('- Сохраненные выбранные контрагенты:', saved);
-            
-            if (saved.contractorIds && Array.isArray(saved.contractorIds)) {
-                this.selectedContractors = saved.contractorIds.map(id => 
-                    this.allContractors.find(c => c.id === id)
-                ).filter(c => c); // убираем undefined
-                
-                console.log('- Восстановлено контрагентов:', this.selectedContractors.length);
-            }
-    
-            // ВОССТАНАВЛИВАЕМ ОТСКАНИРОВАННЫЕ КОДЫ
-            const session = appState.getCurrentSession();
-            if (session.scannedCodes.length > 0) {
-                session.scannedCodes.forEach(code => this.addCodeToList(code));
-                this.updateUI();
-            }
-            
-            this.updateSelectedContractorsUI();
-            this.updateButtonStates();
-            this.updateSessionStatus();
-            
-            console.log('✅ Сессия восстановлена');
-            
-        } catch (error) {
-            console.error('❌ Ошибка восстановления сессии:', error);
-            // Сбрасываем при ошибке
-            this.selectedContractors = [];
-            this.updateSelectedContractorsUI();
-        }
-    }
-
-    // СОЗДАНИЕ ОТЧЕТА
-    async generateReport() {
         const session = appState.getCurrentSession();
         
         if (session.scannedCodes.length === 0) {
@@ -1965,567 +609,229 @@ class ScannerManager {
             return;
         }
 
-        try {
-            const report = {
-                id: Date.now(),
-                contractorName: this.selectedContractors.map(c => c.name).join(', '),
-                contractors: [...this.selectedContractors],
-                codes: [...session.scannedCodes],
-                createdAt: new Date().toISOString(),
-                status: 'pending',
-                sessionId: session.id // 
-            };
+        const report = {
+            id: Date.now(),
+            contractorName: this.selectedContractors.map(c => c.name).join(', '),
+            contractors: [...this.selectedContractors],
+            codes: [...session.scannedCodes],
+            createdAt: new Date().toISOString(),
+            status: 'pending'
+        };
 
-            // СОХРАНЯЕМ ОТЧЕТ
-            appState.saveReport(report);
-            
-            showSuccess(`✅ Отчет создан! Кодов: ${session.scannedCodes.length}`, 5000);
-            this.clearSession();
-
-            // ОБНОВЛЯЕМ СПИСОК ОТЧЕТОВ
-            this.loadReportsList();
-
-            console.log('📊 Отчет создан, сессия остается активной для возможного дополнения');
-            
-        } catch (error) {
-            console.error('❌ Ошибка создания отчета:', error);
-            showError('Ошибка создания отчета');
-        }
+        appState.saveReport(report);
+        showSuccess(`✅ Отчет создан! Кодов: ${session.scannedCodes.length}`, 5000);
+        
+        // Очищаем сессию
+        this.clearSession();
+        
+        // Обновляем список отчетов
+        this.loadReportsList();
     }
 
-    // ОЧИСТКА СЕССИИ
     clearSession() {
         this.stopCamera();
-        appState.clearCurrentSession();
+        if (appState) {
+            appState.clearCurrentSession();
+        }
         this.selectedContractors = [];
         this.updateSelectedContractorsUI();
         this.updateUI();
         showWarning('🗑️ Сессия очищена', 3000);
     }
 
-    // СОХРАНЕНИЕ КОНТРАГЕНТОВ В ХРАНИЛИЩЕ
-    saveContractors() {
-        console.log('💾 СОХРАНЕНИЕ КОНТРАГЕНТОВ В ХРАНИЛИЩЕ');
+    loadReportsList() {
+        if (!appState) return;
         
-        try {
-            // Проверяем что есть что сохранять
-            if (!this.allContractors || this.allContractors.length === 0) {
-                console.warn('⚠️ Нет контрагентов для сохранения');
-                return;
-            }
-            
-            console.log('- Сохраняем контрагентов:', this.allContractors.length);
-            console.log('- Данные для сохранения:', this.allContractors);
-            
-            // Добавляем timestamp для отслеживания
-            const contractorsToSave = this.allContractors.map(contractor => ({
-                ...contractor,
-                updatedAt: new Date().toISOString()
-            }));
-            
-            // Преобразуем в чистый JSON
-            const jsonData = JSON.stringify(contractorsToSave);
-            console.log('- JSON для сохранения:', jsonData);
-            
-            // Сохраняем в localStorage
-            localStorage.setItem('honest_sign_contractors', jsonData);
-            
-            // ПРОВЕРЯЕМ СОХРАНЕНИЕ
-            const saved = localStorage.getItem('honest_sign_contractors');
-            console.log('- Проверка сохранения:', saved ? '✅ Успешно' : '❌ Ошибка');
-            
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                console.log('- Проверка данных:', parsed.length === this.allContractors.length ? '✅ Данные совпадают' : '❌ Данные не совпадают');
-                console.log('- Сохранено контрагентов:', parsed.length);
-                
-                // Показываем уведомление пользователю
-                showSuccess(`✅ Сохранено ${parsed.length} контрагентов`, 2000);
-            } else {
-                console.error('❌ Данные не сохранились в localStorage');
-                showError('❌ Ошибка сохранения контрагентов');
-            }
-            
-        } catch (error) {
-            console.error('❌ КРИТИЧЕСКАЯ ОШИБКА СОХРАНЕНИЯ:', error);
-            showError('Ошибка сохранения контрагентов');
-            
-            // Пробуем сохранить хотя бы основные данные
-            try {
-                const basicContractors = this.allContractors.map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    category: c.category
-                }));
-                localStorage.setItem('honest_sign_contractors', JSON.stringify(basicContractors));
-                console.log('🔄 Сохранены базовые данные');
-            } catch (e) {
-                console.error('❌ Не удалось сохранить даже базовые данные:', e);
-            }
-        }
-    }
+        const reports = appState.getAllReports();
+        const container = document.getElementById('reportsList');
+        
+        if (!container) return;
 
-    enableTestMode() {
-        console.log('🧪 Включаем тестовый режим...');
-        
-        // Автоматически выбираем первого контрагента для теста
-        if (this.allContractors.length > 0) {
-            const testContractor = this.allContractors[0];
-            this.toggleContractor(testContractor.id);
-            console.log('✅ Автовыбор контрагента для теста:', testContractor.name);
-            showSuccess(`Автовыбран: ${testContractor.name} для тестирования`, 3000);
-        } else {
-            // Если контрагентов нет - создаем тестового
-            const testContractor = { id: 1, name: 'Тестовый клиент', category: 'Для теста' };
-            this.allContractors.push(testContractor);
-            this.toggleContractor(testContractor.id);
-            this.saveContractors();
-            console.log('✅ Создан тестовый контрагент');
-            showSuccess('Создан тестовый клиент для проверки камеры', 3000);
-        }
-        
-        // Включаем камеру через 1 секунду
-        setTimeout(() => {
-            if (this.selectedContractors.length > 0) {
-                this.startCamera();
-            }
-        }, 1000);
-    }
-
-    // ДОБАВЬТЕ в класс ScannerManager
-    checkBrowserCompatibility() {
-        console.log('🌐 Проверка совместимости браузера...');
-        
-        const compatibility = {
-            mediaDevices: !!navigator.mediaDevices,
-            getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-            enumerateDevices: !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices),
-            html5Qrcode: typeof Html5Qrcode !== 'undefined',
-            userAgent: navigator.userAgent
-        };
-        
-        console.log('📊 Совместимость:', compatibility);
-        
-        // Определяем браузер
-        let browser = 'Unknown';
-        let version = 'Unknown';
-        
-        if (/OPR\//.test(navigator.userAgent)) {
-            browser = 'Opera';
-            version = navigator.userAgent.match(/OPR\/(\d+)/)[1];
-        } else if (/Chrome\//.test(navigator.userAgent)) {
-            browser = 'Chrome';
-            version = navigator.userAgent.match(/Chrome\/(\d+)/)[1];
-        } else if (/Firefox\//.test(navigator.userAgent)) {
-            browser = 'Firefox';
-            version = navigator.userAgent.match(/Firefox\/(\d+)/)[1];
-        } else if (/Safari\//.test(navigator.userAgent)) {
-            browser = 'Safari';
-            version = navigator.userAgent.match(/Version\/(\d+)/)?.[1] || 'Unknown';
-        }
-        
-        const result = {
-            browser,
-            version,
-            compatible: compatibility.mediaDevices && compatibility.getUserMedia,
-            details: compatibility
-        };
-        
-        console.log('🔍 Результат проверки:', result);
-        return result;
-    }
-
-    // метод показа предупреждения о совместимости
-    showBrowserCompatibilityWarning(compatibility) {
-        console.warn('⚠️ Браузер не совместим с камерой:', compatibility);
-        
-        const warningHtml = `
-        <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 15px 0;">
-            <h4 style="color: #856404; margin-top: 0;">⚠️ Внимание: Проблема совместимости</h4>
-            <p style="color: #856404; margin-bottom: 10px;">
-                Ваш браузер <strong>${compatibility.browser} ${compatibility.version}</strong> 
-                не поддерживает доступ к камере.
-            </p>
-            <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
-                <strong>Рекомендуемые браузеры:</strong>
-                <ul style="margin: 5px 0; padding-left: 20px;">
-                    <li>Chrome 60+</li>
-                    <li>Firefox 55+</li>
-                    <li>Safari 11+</li>
-                    <li>Opera 47+</li>
-                </ul>
-            </div>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button onclick="scannerManager.downloadRecommendedBrowser()" 
-                        class="btn btn-primary btn-sm">
-                    📲 Скачать Chrome
-                </button>
-                <button onclick="scannerManager.showManualInputMode()" 
-                        class="btn btn-success btn-sm">
-                    ✍️ Ручной ввод кодов
-                </button>
-                <button onclick="scannerManager.useSimulatorMode()" 
-                        class="btn btn-info btn-sm">
-                    🧪 Режим симулятора
-                </button>
-            </div>
-        </div>
-        `;
-        
-        // Добавляем предупреждение в начало контейнера
-        const container = document.querySelector('.container');
-        if (container) {
-            const warningDiv = document.createElement('div');
-            warningDiv.innerHTML = warningHtml;
-            container.insertBefore(warningDiv, container.firstChild);
-        }
-        
-        // Показываем симулятор по умолчанию
-        this.showSimulator();
-    }
-
-    // метод для ручного ввода
-    showManualInputMode() {
-        console.log('✍️ Активируем режим ручного ввода...');
-        
-        // Скрываем элементы камеры
-        document.getElementById('startCamera').style.display = 'none';
-        document.getElementById('stopCamera').style.display = 'none';
-        
-        // Показываем ручной ввод
-        const manualInputHtml = `
-        <div class="card" style="background: #e7f3ff; border: 2px dashed #007bff;">
-            <h3>✍️ Ручной ввод QR-кодов</h3>
-            <div class="form-group">
-                <label>Введите QR-код вручную:</label>
-                <input type="text" id="manualCodeInput" class="form-select" 
-                    placeholder="0104604063405720219NQNfSwVmcTEST001"
-                    style="font-family: monospace; font-size: 14px;">
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button onclick="scannerManager.addManualCode()" class="btn btn-success">
-                    ✅ Добавить код
-                </button>
-                <button onclick="scannerManager.batchInputMode()" class="btn btn-info">
-                    📝 Пакетный ввод
-                </button>
-            </div>
-            <div style="margin-top: 10px; font-size: 12px; color: #666;">
-                <strong>Формат кода:</strong> 01... (21 символ DataMatrix)
-            </div>
-        </div>
-        `;
-        
-        const scannerCard = document.querySelector('.card:nth-child(3)'); // Карточка сканирования
-        if (scannerCard) {
-            scannerCard.innerHTML = manualInputHtml + scannerCard.innerHTML;
-        }
-        
-        showSuccess('Режим ручного ввода активирован', 3000);
-    }
-
-    // метод добавления кода вручную
-    addManualCode() {
-        const input = document.getElementById('manualCodeInput');
-        const code = input.value.trim();
-        
-        if (!code) {
-            showError('❌ Введите QR-код');
+        if (reports.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-icon">📄</span>
+                    <p>Нет отчетов</p>
+                </div>
+            `;
             return;
         }
-        
-        if (code.length < 10) {
-            showError('❌ Код слишком короткий');
-            return;
-        }
-        
-        this.simulateScan(code);
-        input.value = '';
-        input.focus();
+
+        container.innerHTML = reports.map(report => `
+            <div class="report-item">
+                <div class="report-info">
+                    <div class="report-header">
+                        <strong>${report.contractorName}</strong>
+                        <span class="report-status ${report.status}">${report.status}</span>
+                    </div>
+                    <div class="report-details">
+                        <span>Кодов: ${report.codes.length}</span>
+                        <span>${new Date(report.createdAt).toLocaleString()}</span>
+                    </div>
+                </div>
+            </div>
+        `).join('');
     }
 
-    // метод пакетного ввода
-    batchInputMode() {
-        const batchHtml = `
-        <div class="card" style="background: #fff3cd; border: 2px dashed #ffc107;">
-            <h3>📝 Пакетный ввод кодов</h3>
-            <div class="form-group">
-                <label>Введите коды (по одному в строке):</label>
-                <textarea id="batchCodesInput" class="form-select" 
-                        rows="6" 
-                        placeholder="0104604063405720219NQNfSwVmcTEST001&#10;0104604063405720219NQNfSwVmdTEST002&#10;0104604063405720219NQNfSwVmeTEST003"
-                        style="font-family: monospace; font-size: 12px;"></textarea>
-            </div>
-            <div style="display: flex; gap: 10px; margin-top: 15px;">
-                <button onclick="scannerManager.addBatchCodes()" class="btn btn-success">
-                    ✅ Добавить все коды
-                </button>
-                <button onclick="scannerManager.closeBatchInput()" class="btn btn-secondary">
-                    ✕ Закрыть
-                </button>
-            </div>
-            <div style="margin-top: 10px; font-size: 12px; color: #666;">
-                Каждая строка - отдельный QR-код
-            </div>
-        </div>
-        `;
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    updateUI() {
+        if (!appState) return;
         
-        const scannerCard = document.querySelector('.card:nth-child(3)');
-        if (scannerCard) {
-            scannerCard.innerHTML = batchHtml;
-        }
+        const session = appState.getCurrentSession();
+        const codesCount = session.scannedCodes.length;
+        
+        const totalCodes = document.getElementById('totalCodes');
+        const codesCountElement = document.getElementById('codesCount');
+        
+        if (totalCodes) totalCodes.textContent = codesCount;
+        if (codesCountElement) codesCountElement.textContent = codesCount;
+        
+        this.updateButtonStates();
+        this.updateCodesList();
     }
 
-    addBatchCodes() {
-        const textarea = document.getElementById('batchCodesInput');
-        const codesText = textarea.value.trim();
+    updateButtonStates() {
+        const hasContractors = this.selectedContractors.length > 0;
+        const hasCodes = appState && appState.getCurrentSession().scannedCodes.length > 0;
         
-        if (!codesText) {
-            showError('❌ Введите коды');
-            return;
-        }
+        const startCamera = document.getElementById('startCamera');
+        const generateReport = document.getElementById('generateReport');
         
-        const codes = codesText.split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
+        if (startCamera) startCamera.disabled = !hasContractors;
+        if (generateReport) generateReport.disabled = !hasContractors || !hasCodes;
+    }
+
+    updateCodesList() {
+        if (!appState) return;
+        
+        const codesList = document.getElementById('codesList');
+        const codes = appState.getCurrentSession().scannedCodes;
         
         if (codes.length === 0) {
-            showError('❌ Не найдено валидных кодов');
-            return;
+            codesList.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-icon">📦</span>
+                    <p>Нет отсканированных кодов</p>
+                </div>
+            `;
         }
-        
-        let addedCount = 0;
-        let duplicateCount = 0;
-        
-        codes.forEach(code => {
-            if (code.length >= 10 && !appState.hasCodeBeenScanned(code)) {
-                this.simulateScan(code);
-                addedCount++;
-            } else {
-                duplicateCount++;
-            }
-        });
-        
-        let message = `✅ Добавлено ${addedCount} кодов`;
-        if (duplicateCount > 0) {
-            message += `, пропущено ${duplicateCount} дубликатов`;
-        }
-        
-        showSuccess(message, 5000);
-        this.closeBatchInput();
     }
 
-    closeBatchInput() {
-        this.showManualInputMode();
-    }
-
-    useSimulatorMode() {
-        console.log('🧪 Активируем режим симулятора...');
-        this.showSimulator();
-        showSuccess('Режим симулятора активирован', 3000);
-    }
-
-    downloadRecommendedBrowser() {
-        const userAgent = navigator.userAgent.toLowerCase();
-        
-        let storeUrl = '';
-        if (/android/.test(userAgent)) {
-            storeUrl = 'https://play.google.com/store/apps/details?id=com.android.chrome';
-        } else if (/iphone|ipad/.test(userAgent)) {
-            storeUrl = 'https://apps.apple.com/app/chrome-web-browser/id535886823';
-        } else {
-            storeUrl = 'https://www.google.com/chrome/';
-        }
-        
-        window.open(storeUrl, '_blank');
-        showInfo('Открыта страница загрузки Chrome', 3000);
-    }
-
-    // ВОССТАНОВЛЕНИЕ КАМЕРЫ ПРИ ПОВТОРНОМ ЗАХОДЕ
-    async restoreCameraState() {
-        console.log('🔁 Проверяем состояние камеры...');
-        
+    checkExistingSession() {
         try {
-            // Проверяем поддержку mediaDevices
-            if (!navigator.mediaDevices) {
-                console.warn('⚠️ mediaDevices не поддерживается в этом браузере');
-                addToConsole('❌ mediaDevices не поддерживается - используйте современный браузер');
-                return false;
+            // Восстанавливаем выбранных контрагентов
+            const saved = JSON.parse(localStorage.getItem('honest_sign_selected_contractors') || '{}');
+            
+            if (saved.contractorIds && Array.isArray(saved.contractorIds)) {
+                this.selectedContractors = saved.contractorIds.map(id => 
+                    this.allContractors.find(c => c.id === id)
+                ).filter(c => c);
             }
-            
-            if (!navigator.mediaDevices.enumerateDevices) {
-                console.warn('⚠️ enumerateDevices не поддерживается');
-                addToConsole('❌ enumerateDevices не поддерживается');
-                return false;
-            }
-            
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            console.log('📸 Доступные видеоустройства:', videoDevices.length);
-            addToConsole(`📸 Найдено камер: ${videoDevices.length}`);
-            
-            if (videoDevices.length === 0) {
-                console.warn('⚠️ Видеоустройства не найдены');
-                addToConsole('❌ Камеры не найдены - проверьте разрешения');
-                return false;
-            }
-            
-            // Пробуем получить доступ к камере
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    } 
-                });
-                
-                // Останавливаем тестовый поток
-                stream.getTracks().forEach(track => track.stop());
-                
-                console.log('✅ Камера доступна для запуска');
-                addToConsole('✅ Камера доступна!');
-                return true;
-                
-            } catch (error) {
-                console.warn('⚠️ Нет разрешения на камеру:', error.message);
-                addToConsole(`❌ Нет разрешения: ${error.message}`);
-                
-                // Показываем инструкции для мобильных
-                if (/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-                    this.showMobileCameraInstructions();
+
+            // Восстанавливаем отсканированные коды через appState
+            if (appState) {
+                const session = appState.getCurrentSession();
+                if (session.scannedCodes.length > 0) {
+                    session.scannedCodes.forEach(code => this.addCodeToList(code));
                 }
-                
-                return false;
             }
+
+            this.updateSelectedContractorsUI();
+            this.updateButtonStates();
+            this.updateUI();
             
         } catch (error) {
-            console.error('❌ Ошибка проверки камеры:', error);
-            addToConsole(`❌ Ошибка проверки: ${error.message}`);
-            return false;
-        }
-    }
-    
-    // Добавьте метод для мобильных инструкций
-    showMobileCameraInstructions() {
-        const instructions = `
-    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 8px; padding: 15px; margin: 15px 0;">
-        <h4 style="color: #155724; margin-top: 0;">📱 Как разрешить камеру на мобильном:</h4>
-        <ol style="color: #155724; margin-bottom: 0;">
-            <li>Нажмите на значок <strong>🔒</strong> в адресной строке</li>
-            <li>Выберите <strong>"Разрешить"</strong> для доступа к камере</li>
-            <li>Или в настройках браузера → Сайты → Камера</li>
-            <li>Найдите этот сайт и разрешите доступ</li>
-            <li><strong>Перезагрузите страницу</strong></li>
-        </ol>
-    </div>
-        `;
-        
-        const scanControls = document.querySelector('.scan-controls');
-        if (scanControls && !document.getElementById('mobileCameraInstructions')) {
-            const instructionsDiv = document.createElement('div');
-            instructionsDiv.id = 'mobileCameraInstructions';
-            instructionsDiv.innerHTML = instructions;
-            scanControls.parentNode.insertBefore(instructionsDiv, scanControls.nextSibling);
+            console.error('❌ Ошибка восстановления сессии:', error);
+            this.selectedContractors = [];
         }
     }
 
-    // ИНСТРУКЦИИ ДЛЯ CHROME ANDROID
-    showChromeAndroidInstructions() {
-        const instructions = `
-    <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 15px; margin: 15px 0;">
-        <h4 style="color: #856404; margin-top: 0;">📱 Инструкция для Chrome на Android</h4>
-        <ol style="color: #856404; margin-bottom: 0;">
-            <li>Откройте <strong>Настройки Chrome</strong></li>
-            <li>Перейдите в <strong>Настройки сайта</strong></li>
-            <li>Выберите <strong>Камера</strong></li>
-            <li>Разрешите доступ для этого сайта</li>
-            <li>Перезагрузите страницу</li>
-        </ol>
-    </div>
-            `;
-            
-            // Добавляем инструкции под кнопками сканирования
-            const scanControls = document.querySelector('.scan-controls');
-            if (scanControls && !document.getElementById('chromeInstructions')) {
-                const instructionsDiv = document.createElement('div');
-                instructionsDiv.id = 'chromeInstructions';
-                instructionsDiv.innerHTML = instructions;
-                scanControls.parentNode.insertBefore(instructionsDiv, scanControls.nextSibling);
+    showDropdown() {
+        const dropdown = document.getElementById('contractorDropdown');
+        if (dropdown) {
+            dropdown.classList.remove('hidden');
+        }
+    }
+
+    hideDropdown() {
+        const dropdown = document.getElementById('contractorDropdown');
+        if (dropdown) {
+            dropdown.classList.add('hidden');
+        }
+    }
+
+    async loadHtml5QrCode() {
+        return new Promise((resolve, reject) => {
+            if (typeof Html5Qrcode !== 'undefined') {
+                resolve();
+                return;
             }
-        }
 
-    // ОБНОВЛЕНИЕ ВЫБРАННЫХ КОНТРАГЕНТОВ В ИНТЕРФЕЙСЕ
-    updateSelectedContractorsUI() {
-        const container = document.getElementById('selectedContractors');
-        const contractorsList = document.getElementById('contractorsList');
-        const selectedCount = document.getElementById('selectedCount');
-        
-        if (!container || !contractorsList) {
-            console.error('❌ Элементы интерфейса контрагентов не найдены');
-            return;
-        }
-        
-        if (this.selectedContractors.length === 0) {
-            container.classList.add('hidden');
-            if (selectedCount) selectedCount.textContent = '0';
-            return;
-        }
-        
-        container.classList.remove('hidden');
-        if (selectedCount) selectedCount.textContent = this.selectedContractors.length;
-        
-        // Используем существующие классы из CSS
-        contractorsList.innerHTML = this.selectedContractors.map(contractor => 
-            `<div class="contractor-tag">
-                <span class="contractor-name">${contractor.name}</span>
-                <span class="contractor-category">${contractor.category}</span>
-                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeContractor(${contractor.id})">
-                    ✕
-                </button>
-            </div>`
-        ).join('');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/html5-qrcode';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('Не удалось загрузить библиотеку сканирования'));
+            document.head.appendChild(script);
+        });
     }
 
-    // ПОКАЗ СИМУЛЯТОРА
-    showSimulator() {
-        console.log('🧪 Показываем симулятор сканирования');
-        const simulator = document.getElementById('simulator');
-        if (simulator) {
-            simulator.classList.remove('hidden');
-        }
-        showInfo('Режим симулятора активирован', 3000);
+    // ОБРАБОТЧИКИ СОБЫТИЙ
+    setupEventListeners() {
+        console.log('🔧 Настройка обработчиков событий');
+        
+        // Основные кнопки
+        this.setupButton('startCamera', 'startCamera');
+        this.setupButton('stopCamera', 'stopCamera');
+        this.setupButton('showSimulator', 'showSimulator');
+        this.setupButton('generateReport', 'generateReport');
+        this.setupButton('clearSession', 'clearSession');
+        
+        // Управление контрагентами
+        this.setupButton('addManualContractorBtn', 'showAddContractorForm');
+        this.setupButton('importContractorsBtn', 'showImportForm');
+        
+        // Модальные окна
+        this.setupButton('hideContractorManager', 'hideContractorManager');
+        this.setupButton('hideAddContractorForm', 'hideAddContractorForm');
+        this.setupButton('clearContractors', 'clearContractors');
+        this.setupButton('addContractor', 'addContractor');
+
+        // Тестовые коды
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.test-code')) {
+                const testCode = e.target.closest('.test-code');
+                const code = testCode.getAttribute('data-scan');
+                if (code) {
+                    e.preventDefault();
+                    this.simulateScan(code);
+                }
+            }
+        });
+
+        // Закрытие модальных окон
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'contractorManager') {
+                this.hideContractorManager();
+            }
+        });
     }
 
-    // СИМУЛЯЦИЯ СКАНИРОВАНИЯ
-    simulateScan(code) {
-        console.log('🧪 Симуляция сканирования кода:', code);
-        this.onScanSuccess(code);
+    setupButton(elementId, methodName) {
+        const element = document.getElementById(elementId);
+        if (element && this[methodName]) {
+            element.addEventListener('click', (e) => {
+                e.preventDefault();
+                this[methodName]();
+            });
+        }
     }
 }
-
-// ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ HTML
-window.handleContractorSelection = function(contractorId) {
-    if (window.scannerManager) {
-        window.scannerManager.handleContractorSelection(contractorId);
-    }
-};
 
 // ИНИЦИАЛИЗАЦИЯ
-let scannerManager;
-
-// Единый обработчик инициализации
-function initializeScannerManager() {
-    if (!window.scannerManager) {
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM загружен');
+    
+    if (typeof ScannerManager !== 'undefined' && !window.scannerManager) {
         window.scannerManager = new ScannerManager();
-        console.log('✅ ScannerManager полностью инициализирован');
     }
-}
-
-// Обработчик загрузки DOM
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeScannerManager);
-} else {
-    // DOM уже загружен
-    setTimeout(initializeScannerManager, 100);
-}
+});
