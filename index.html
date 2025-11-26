@@ -9,67 +9,11 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#007bff">
     
-    <!-- Иконки -->
-    <link rel="icon" href="ico/favicon.ico">
-    <link rel="apple-touch-icon" href="ico/icon-192.png">
-    
-    <!-- iOS PWA -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
-    <script>
-        // Детектим Android WebView
-        if (window.isAndroidWebView) {
-            console.log('📱 Запущено в Android приложении');
-            
-            // Добавляем специфичные улучшения для Android
-            document.addEventListener('DOMContentLoaded', function() {
-                // Показываем уведомление о успешной загрузке
-                if (typeof showSuccess === 'function') {
-                    showSuccess('📱 Android приложение запущено\nКамера должна работать идеально!', 5000);
-                }
-                
-                // Добавляем информацию об устройстве
-                addDeviceInfo();
-            });
-        }
-        
-        function addDeviceInfo() {
-            const infoCard = document.createElement('div');
-            infoCard.style.cssText = `
-                background: #e7f3ff;
-                border: 1px solid #b3d9ff;
-                border-radius: 8px;
-                padding: 10px;
-                margin: 10px 0;
-                font-size: 12px;
-                color: #0066cc;
-            `;
-            infoCard.innerHTML = `
-                <strong>📱 Android приложение</strong><br>
-                Версия: ${window.androidVersion || 'Неизвестно'}<br>
-                Камера: ✅ Нативная поддержка
-            `;
-            
-            const container = document.querySelector('.container');
-            if (container) {
-                container.insertBefore(infoCard, container.firstChild);
-            }
-        }
-        
-        // Улучшаем обработку касаний для WebView
-        document.addEventListener('touchmove', function(e) {
-            if (e.touches.length > 1) {
-                e.preventDefault();
-            }
-        }, { passive: false });
-    </script>
-    
+    <!-- Стили -->
     <link rel="stylesheet" href="css/styles.css">
     
     <!-- Библиотеки -->
     <script src="https://unpkg.com/html5-qrcode"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -93,13 +37,13 @@
         
             <!-- КНОПКИ УПРАВЛЕНИЯ -->
             <div class="contractor-management-buttons">
-                <button class="btn btn-outline btn-sm" id="addManualContractorBtn" data-action="showAddContractorForm">
+                <button class="btn btn-outline btn-sm" id="addManualContractorBtn">
                     ➕ Добавить вручную
                 </button>
-                <button class="btn btn-outline btn-sm" id="importContractorsBtn" data-action="showImportForm">
-                    📥 Импорт из Excel/CSV
+                <button class="btn btn-outline btn-sm" id="importContractorsBtn">
+                    📥 Импорт из CSV
                 </button>
-                <button class="btn btn-outline btn-sm" data-action="showContractorManager">
+                <button class="btn btn-outline btn-sm" id="showContractorManagerBtn">
                     👥 Управление контрагентами
                 </button>
             </div>
@@ -107,7 +51,7 @@
             <div id="selectedContractors" class="selected-contractors hidden">
                 <div class="selected-header">
                     <span>Выбрано контрагентов: <strong id="selectedCount">0</strong></span>
-                    <button class="btn btn-sm btn-outline" data-action="clearContractors">
+                    <button class="btn btn-sm btn-outline" id="clearContractors">
                         🗑️ Очистить все
                     </button>
                 </div>
@@ -125,20 +69,12 @@
             </div>
             <div class="status-info">
                 <div class="status-item">
-                    <span class="label">Режим:</span>
-                    <span id="apkModeStatus">📱 APK приложение</span>
-                </div>
-                <div class="status-item">
                     <span class="label">Контрагенты:</span>
                     <span id="currentContractor">-</span>
                 </div>
                 <div class="status-item">
                     <span class="label">Отсканировано кодов:</span>
                     <span id="codesCount" class="badge">0</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">ID сессии:</span>
-                    <span id="sessionId">-</span>
                 </div>
             </div>
         </div>
@@ -148,29 +84,17 @@
             <h3>2. Сканирование кодов</h3>
             
             <div class="scan-controls">
-                <button id="startCamera" class="btn btn-primary" disabled data-action="startCamera">
+                <button id="startCamera" class="btn btn-primary" disabled>
                     <span class="btn-icon">📷</span>
                     Включить камеру
                 </button>
-                <button id="stopCamera" class="btn btn-secondary hidden" data-action="stopCamera">
+                <button id="stopCamera" class="btn btn-secondary hidden">
                     <span class="btn-icon">⏹️</span>
                     Выключить камеру
                 </button>
-                <button id="restartCamera" class="btn btn-warning hidden" data-action="restartCamera">
-                    <span class="btn-icon">🔄</span>
-                    Перезагрузить камеру
-                </button>
-                <button id="showSimulator" class="btn btn-outline" data-action="showSimulator">
+                <button id="showSimulator" class="btn btn-outline">
                     <span class="btn-icon">🧪</span>
                     Симулятор сканирования
-                </button>
-                <button id="requestCameraPermission" class="btn btn-warning hidden" data-action="requestCameraPermission">
-                    <span class="btn-icon">🔒</span>
-                    Разрешить доступ к камере
-                </button>
-                <button id="testMode" class="btn btn-info" data-action="enableTestMode">
-                    <span class="btn-icon">🧪</span>
-                    Тестовый режим
                 </button>
             </div>
 
@@ -179,7 +103,7 @@
                 <div id="reader" class="scanner-placeholder">
                     <div class="scanner-overlay">
                         <span class="placeholder-icon">📷</span>
-                        <p>Камера запущена. Наведите на QR-код</p>
+                        <p>Камера не запущена</p>
                         <div class="scanner-frame"></div>
                     </div>
                 </div>
@@ -188,7 +112,7 @@
             <!-- СИМУЛЯТОР -->
             <div id="simulator" class="simulator hidden">
                 <h4>🧪 Тестовые QR-коды</h4>
-                <p>Используйте эти коды для тестирования (камера не требуется):</p>
+                <p>Используйте эти коды для тестирования:</p>
                 
                 <div class="test-codes-grid">
                     <div class="test-code" data-scan="0104604063405720219NQNfSwVmcTEST001">
@@ -203,16 +127,6 @@
                         <span class="code-preview">0104604063405720219NQNfSwVmeTEST003</span>
                         <button class="btn btn-sm btn-success">📦 Сканировать</button>
                     </div>
-                    <div class="test-code" data-scan="0104604063405720219NQNfSwVmfTEST004">
-                        <span class="code-preview">0104604063405720219NQNfSwVmfTEST004</span>
-                        <button class="btn btn-sm btn-success">📦 Сканировать</button>
-                    </div>
-                </div>
-
-                <div class="simulator-actions">
-                    <button data-action="simulateMultipleScans" class="btn btn-outline">🔄 Добавить 5 тестовых кодов</button>
-                    <button data-action="manualInputCode" class="btn btn-outline">✍️ Ввести код вручную</button>
-                    <button data-action="hideSimulator" class="btn btn-secondary">✕ Закрыть симулятор</button>
                 </div>
             </div>
         </div>
@@ -237,11 +151,11 @@
         <div class="card">
             <h3>4. Формирование отчета</h3>
             <div class="actions-grid">
-                <button id="generateReport" class="btn btn-success" disabled data-action="generateReport">
+                <button id="generateReport" class="btn btn-success" disabled>
                     <span class="btn-icon">📄</span>
                     Сформировать отчет
                 </button>
-                <button id="clearSession" class="btn btn-danger" data-action="clearSession">
+                <button id="clearSession" class="btn btn-danger">
                     <span class="btn-icon">🗑️</span>
                     Очистить сессию
                 </button>
@@ -252,10 +166,6 @@
         <div class="card">
             <div class="card-header">
                 <h3>📊 История отчетов</h3>
-                <div>
-                    <button id="deleteAllPending" class="btn btn-sm btn-danger" data-action="deleteAllPendingReports">🗑️ Удалить все необработанные</button>
-                    <button id="refreshReports" class="btn btn-sm btn-outline" data-action="refreshReports">🔄 Обновить</button>
-                </div>
             </div>
         
             <div id="reportsList" class="reports-list">
@@ -266,58 +176,25 @@
                 </div>
             </div>
         </div>
-
-        <!-- СИНХРОНИЗАЦИЯ -->
-        <div class="card">
-            <div class="card-header">
-                <h3>🔄 Синхронизация данных</h3>
-            </div>
-
-            <div class="sync-actions">
-                <button class="btn btn-outline" data-action="syncAllData">🔄 Синхронизировать</button>
-                <button class="btn btn-outline" data-action="exportAllData">📤 Экспорт данных</button>
-                <button class="btn btn-outline" data-action="importData">📥 Импорт данных</button>
-                <button class="btn btn-outline" data-action="showSyncStatus">ℹ️ Статус</button>
-            </div>
-            <input type="file" id="importFile" accept=".json" style="display: none;" 
-                onchange="handleFileImport(this.files[0])">
-        </div>
     </div>
 
     <!-- КОНТЕЙНЕР ДЛЯ УВЕДОМЛЕНИЙ -->
     <div id="notificationContainer"></div>
-
-    <!-- ПАНЕЛЬ УВЕДОМЛЕНИЙ -->
-    <div id="warehouseNotifications" class="notifications-panel hidden">
-        <div class="notifications-header">
-            <h4>📧 Уведомления от бухгалтерии</h4>
-            <button class="btn btn-sm btn-secondary" data-action="hideNotifications">✕ Закрыть</button>
-        </div>
-        <div id="notificationsList" class="notifications-list">
-            <!-- Уведомления загружаются динамически -->
-        </div>
-    </div>
-
-    <!-- КНОПКА УВЕДОМЛЕНИЙ -->
-    <button id="showNotifications" class="notification-bell" data-action="showNotifications">
-        🔔 <span id="notificationCount" class="notification-badge hidden">0</span>
-    </button>
 
     <!-- МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ КОНТРАГЕНТАМИ -->
     <div id="contractorManager" class="modal-overlay hidden">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>👥 Управление контрагентами</h3>
-                <button class="btn btn-sm btn-secondary" data-action="hideContractorManager">
+                <button class="btn btn-sm btn-secondary" id="hideContractorManager">
                     ✕ Закрыть
                 </button>
             </div>
             
             <div class="modal-body">
                 <div class="quick-actions">
-                    <button class="btn btn-success" data-action="showAddContractorForm">➕ Добавить контрагента</button>
-                    <button class="btn btn-outline" data-action="exportContractors">📤 Экспорт в CSV</button>
-                    <button class="btn btn-outline" data-action="showImportForm">📥 Импорт из CSV</button>
+                    <button class="btn btn-success" id="showAddContractorFormBtn">➕ Добавить контрагента</button>
+                    <button class="btn btn-outline" id="showImportFormBtn">📥 Импорт из CSV</button>
                 </div>
                 
                 <!-- ФОРМА ДОБАВЛЕНИЯ КОНТРАГЕНТА -->
@@ -332,8 +209,8 @@
                         <input type="text" id="contractorCategory" class="form-select" placeholder="Оптовый покупатель">
                     </div>
                     <div class="form-actions">
-                        <button class="btn btn-success" data-action="addContractor">✅ Добавить</button>
-                        <button class="btn btn-outline" data-action="hideAddContractorForm">❌ Отмена</button>
+                        <button class="btn btn-success" id="addContractor">✅ Добавить</button>
+                        <button class="btn btn-outline" id="hideAddContractorForm">❌ Отмена</button>
                     </div>
                 </div>
                 
@@ -343,15 +220,12 @@
                     <div class="form-group">
                         <label>CSV данные (Название,Категория):</label>
                         <textarea id="importData" class="form-select" rows="6" placeholder="ООО Ромашка,Оптовый покупатель
-    ИП Иванов,Розничная сеть
-    ООО Луч,Дилер"></textarea>
-                    </div>
-                    <div class="form-help">
-                        <small>Формат: каждая строка - отдельный контрагент, поля разделены запятыми</small>
+ИП Иванов,Розничная сеть
+ООО Луч,Дилер"></textarea>
                     </div>
                     <div class="form-actions">
-                        <button class="btn btn-primary" data-action="importContractors">📥 Импортировать</button>
-                        <button class="btn btn-outline" data-action="hideImportForm">❌ Отмена</button>
+                        <button class="btn btn-primary" id="importContractors">📥 Импортировать</button>
+                        <button class="btn btn-outline" id="hideImportForm">❌ Отмена</button>
                     </div>
                 </div>
                 
@@ -359,8 +233,7 @@
                 <div class="contractors-list-section">
                     <h4>Список контрагентов</h4>
                     <div class="search-box">
-                        <input type="text" id="managerSearch" placeholder="🔍 Поиск контрагентов..." class="form-select" 
-                            oninput="scannerManager.filterContractorsList()">
+                        <input type="text" id="managerSearch" placeholder="🔍 Поиск контрагентов..." class="form-select">
                     </div>
                     <div id="contractorsManagerList" class="contractors-manager-list">
                         <!-- Список будет здесь -->
@@ -377,21 +250,21 @@
         </button>
         <div id="consolePanel" style="display: none; position: absolute; bottom: 60px; right: 0; width: 320px; height: 300px; background: #1e1e1e; color: #00ff00; border: 2px solid #007bff; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 14px;">
             <div style="background: #007bff; color: white; padding: 8px; border-radius: 6px 6px 0 0; display: flex; justify-content: space-between; align-items: center;">
-                <strong>Сканер - Консоль отладки</strong>
+                <strong>Консоль отладки</strong>
                 <div>
                     <button onclick="clearMobileConsole()" style="background: #ff4444; color: white; border: none; border-radius: 4px; padding: 2px 8px; margin-right: 5px;">🧹</button>
-                    <button onclick="toggleMobileConsole()" style="background: #666; color: white; border: none; border-radius: 4px; padding: 2px 8px;">✕ Закрыть</button>
+                    <button onclick="toggleMobileConsole()" style="background: #666; color: white; border: none; border-radius: 4px; padding: 2px 8px;">✕</button>
                 </div>
             </div>
             <div id="consoleOutput" style="height: 220px; overflow-y: auto; padding: 10px; border-bottom: 1px solid #333;">
-                <!-- Сюда выводятся логи -->
+                <!-- Логи будут здесь -->
             </div>
             <div style="padding: 8px;">
                 <input type="text" id="consoleInput" placeholder="Введите команду..." 
                        style="width: 100%; padding: 8px; border: 1px solid #555; background: #2d2d2d; color: #00ff00; border-radius: 4px; font-family: monospace;"
                        onkeypress="handleConsoleInput(event)">
                 <small style="color: #888; display: block; margin-top: 5px;">
-                    Команды: debug, camera, contractors, storage, fix, help
+                    Команды: debug, contractors, camera, help
                 </small>
             </div>
         </div>
@@ -400,728 +273,125 @@
     <!-- ПОДКЛЮЧАЕМ СКРИПТЫ -->
     <script src="js/app-state.js"></script>
     <script src="js/utils.js"></script>
-    <script src="js/notifications.js"></script>
-    <script src="js/pdf-generator.js"></script>
     <script src="js/scanner.js"></script>
 
     <script>
-        // ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОБРАБОТКИ СОБЫТИЙ
-        window.handleContractorSelection = function(contractorId) {
-            if (window.scannerManager) {
-                window.scannerManager.handleContractorSelection(contractorId);
-            }
-        };
-
-        // РЕЗЕРВНАЯ ЗАГРУЗКА БИБЛИОТЕКИ
-        function loadHtml5QrCode() {
-            return new Promise((resolve, reject) => {
-                if (typeof Html5Qrcode !== 'undefined') {
-                    resolve();
-                    return;
-                }
-        
-                const scripts = [
-                    'https://unpkg.com/html5-qrcode',
-                    'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/minified/html5-qrcode.min.js',
-                    'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
-                ];
-        
-                function tryLoadScript(index) {
-                    if (index >= scripts.length) {
-                        reject(new Error('Не удалось загрузить библиотеку сканирования'));
-                        return;
-                    }
-        
-                    const script = document.createElement('script');
-                    script.src = scripts[index];
-                    script.onload = () => resolve();
-                    script.onerror = () => tryLoadScript(index + 1);
-                    document.head.appendChild(script);
-                }
-        
-                tryLoadScript(0);
-            });
-        }
-
-        // ОБНОВЛЕННЫЙ ГЛОБАЛЬНЫЙ ОБРАБОТЧИК СОБЫТИЙ ДЛЯ APK
-        document.addEventListener('click', function(e) {
-            const target = e.target;
-            
-            // Обработка кнопок с data-action
-            if (target.hasAttribute('data-action') || target.closest('[data-action]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                const actionElement = target.hasAttribute('data-action') ? target : target.closest('[data-action]');
-                const action = actionElement.getAttribute('data-action');
-                
-                console.log('🎯 Обработка действия:', action);
-                
-                if (window.scannerManager && typeof scannerManager[action] === 'function') {
-                    scannerManager[action]();
-                } else {
-                    console.error('❌ Действие не найдено:', action, scannerManager);
-                    showError(`Функция "${action}" не доступна`);
-                }
-            }
-            
-            // Обработка тестовых кодов сканирования
-            if (target.closest('.test-code')) {
-                const testCodeElement = target.closest('.test-code');
-                const code = testCodeElement.getAttribute('data-scan');
-                if (code && window.scannerManager) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('🧪 Сканирование тестового кода:', code);
-                    scannerManager.simulateScan(code);
-                }
-            }
-            
-            // Обработка выбора контрагента из dropdown
-            if (target.closest('.dropdown-item') && !target.closest('.dropdown-item').classList.contains('no-results')) {
-                const contractorId = target.closest('.dropdown-item').getAttribute('data-contractor-id');
-                if (contractorId && window.scannerManager) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('👥 Выбор контрагента:', contractorId);
-                    scannerManager.handleContractorSelection(parseInt(contractorId));
-                }
-            }
-            
-            // Обработка кнопок в менеджере контрагентов
-            if (target.hasAttribute('data-contractor-id')) {
-                const contractorId = parseInt(target.getAttribute('data-contractor-id'));
-                const action = target.getAttribute('data-action');
-                
-                if (contractorId && window.scannerManager) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    console.log('👥 Действие с контрагентом:', action, contractorId);
-                    
-                    if (action === 'selectContractorInManager') {
-                        scannerManager.selectContractorInManager(contractorId);
-                    } else if (action === 'deleteContractor') {
-                        scannerManager.deleteContractor(contractorId);
-                    }
-                }
-            }
-            
-            // Обработка кнопки закрытия модального окна контрагентов
-            if (target.closest('#contractorManager') && target.textContent.includes('Закрыть') || 
-                target.closest('#contractorManager') && target.textContent.includes('✕')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('👥 Закрытие менеджера контрагентов');
-                if (window.scannerManager && scannerManager.hideContractorManager) {
-                    scannerManager.hideContractorManager();
-                }
-            }
-            
-            // Обработка кнопки очистки всех контрагентов
-            if (target.textContent.includes('Очистить все') || target.closest('[onclick*="clearContractors"]')) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🧹 Очистка всех контрагентов');
-                if (window.scannerManager && scannerManager.clearContractors) {
-                    scannerManager.clearContractors();
-                }
-            }
-            
-            // Обработка кнопки удаления конкретного контрагента из выбранных
-            if (target.closest('.contractor-tag') && target.textContent.includes('✕')) {
-                e.preventDefault();
-                e.stopPropagation();
-                const contractorTag = target.closest('.contractor-tag');
-                const contractorId = getContractorIdFromTag(contractorTag);
-                if (contractorId && window.scannerManager && scannerManager.removeContractor) {
-                    console.log('🗑️ Удаление контрагента:', contractorId);
-                    scannerManager.removeContractor(contractorId);
-                }
-            }
-        });
-
-        // ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ для получения ID контрагента из тега
-        function getContractorIdFromTag(contractorTag) {
-            // Пытаемся найти ID разными способами
-            const button = contractorTag.querySelector('button');
-            if (button && button.onclick) {
-                const onclickStr = button.onclick.toString();
-                const match = onclickStr.match(/removeContractor\((\d+)\)/);
-                if (match) return parseInt(match[1]);
-            }
-            
-            // Ищем в атрибутах data
-            const dataId = contractorTag.getAttribute('data-contractor-id');
-            if (dataId) return parseInt(dataId);
-            
-            // Пытаемся найти по имени в выбранных контрагентах
-            if (window.scannerManager) {
-                const nameElement = contractorTag.querySelector('.contractor-name');
-                if (nameElement) {
-                    const name = nameElement.textContent.trim();
-                    const contractor = scannerManager.selectedContractors.find(c => c.name === name);
-                    if (contractor) return contractor.id;
-                }
-            }
-            
-            return null;
-        }
-
-        // ИНИЦИАЛИЗАЦИЯ scannerManager
-        let scannerManagerInitialized = false;
-
-        function initializeScannerManager() {
-            if (scannerManagerInitialized) {
-                console.log('⚠️ ScannerManager уже инициализирован - пропускаем');
-                return;
-            }
-            
-            if (typeof AppState === 'undefined' || typeof ScannerManager === 'undefined') {
-                console.log('⏳ Ожидаем загрузку зависимостей...');
-                setTimeout(initializeScannerManager, 1000);
-                return;
-            }
-            
-            try {
-                // Проверяем не создан ли уже scannerManager
-                if (window.scannerManager) {
-                    console.log('⚠️ scannerManager уже существует в window');
-                    scannerManagerInitialized = true;
-                    return;
-                }
-                
-                window.scannerManager = new ScannerManager();
-                scannerManagerInitialized = true;
-                console.log('✅ ScannerManager успешно инициализирован');
-            } catch (error) {
-                console.error('❌ Ошибка инициализации ScannerManager:', error);
-            }
-        }
-
-        // Простая инициализация
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('📄 DOM загружен - проверяем ScannerManager');
-            
-            // Если ScannerManager еще не создан, создаем его
-            if (!window.scannerManager && typeof ScannerManager !== 'undefined') {
-                console.log('🔄 Создаем новый ScannerManager...');
-                try {
-                    window.scannerManager = new ScannerManager();
-                    console.log('✅ ScannerManager создан успешно');
-                } catch (error) {
-                    console.error('❌ Ошибка создания ScannerManager:', error);
-                }
-            } else if (window.scannerManager) {
-                console.log('✅ ScannerManager уже создан');
-            } else {
-                console.error('❌ ScannerManager класс не загружен');
-            }
-        });
-
-        // Глобальные функции для отладки
-        window.debugScanner = function() {
-            console.log('🔍 Отладка ScannerManager:');
-            console.log('- window.scannerManager:', window.scannerManager);
-            console.log('- allContractors:', window.scannerManager?.allContractors);
-            console.log('- localStorage contractors:', localStorage.getItem('honest_sign_contractors'));
-            
-            if (window.scannerManager) {
-                showInfo(`
-                    ScannerManager: ✅ Активен
-                    Контрагентов: ${window.scannerManager.allContractors.length}
-                    Выбрано: ${window.scannerManager.selectedContractors.length}
-                `, 5000);
-            } else {
-                showError('ScannerManager не доступен');
-            }
-        };
-
-        window.reloadContractors = function() {
-            if (window.scannerManager) {
-                console.log('🔄 Принудительная перезагрузка контрагентов...');
-                window.scannerManager.loadContractors();
-                showSuccess('Контрагенты перезагружены', 3000);
-            }
-        };
-
-        // МОБИЛЬНАЯ КОНСОЛЬ ДЛЯ СКАНЕРА
-        let consoleVisible = false;
-
+        // ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТЛАДКИ
         function toggleMobileConsole() {
-            consoleVisible = !consoleVisible;
-            const consolePanel = document.getElementById('consolePanel');
-            
-            if (consolePanel) {
-                if (consoleVisible) {
-                    consolePanel.style.display = 'block';
-                    setTimeout(() => {
-                        const consoleInput = document.getElementById('consoleInput');
-                        if (consoleInput) consoleInput.focus();
-                        addToConsole('🚀 Консоль сканера активирована');
-                        addToConsole('💡 Введите "help" для списка команд');
-                    }, 100);
-                } else {
-                    consolePanel.style.display = 'none';
-                }
-            }
+            const panel = document.getElementById('consolePanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function clearMobileConsole() {
+            document.getElementById('consoleOutput').innerHTML = '';
         }
 
         function handleConsoleInput(event) {
             if (event.key === 'Enter') {
                 const command = event.target.value.trim();
                 event.target.value = '';
-                
-                addToConsole(`<span style="color: #ffff00">&gt; ${command}</span>`);
-                executeScannerCommand(command);
+                executeConsoleCommand(command);
             }
         }
 
-        function executeScannerCommand(command) {
+        function executeConsoleCommand(command) {
+            const output = document.getElementById('consoleOutput');
+            
+            function addLog(message) {
+                output.innerHTML += `<div style="margin-bottom: 5px;">${message}</div>`;
+                output.scrollTop = output.scrollHeight;
+            }
+
+            addLog(`<span style="color: #ffff00">&gt; ${command}</span>`);
+
             switch(command.toLowerCase()) {
                 case 'debug':
-                case 'info':
-                    showScannerDebugInfo();
-                    break;
-                case 'camera':
-                    testCameraManually();
-                    break;
-                    case 'status':
-                    showScannerStatus();
-                break;
-                case 'reload':
+                    addLog('<strong>📊 Статус системы:</strong>');
+                    addLog(`• ScannerManager: ${window.scannerManager ? '✅' : '❌'}`);
+                    addLog(`• AppState: ${window.appState ? '✅' : '❌'}`);
                     if (window.scannerManager) {
-                        window.scannerManager.loadContractors();
-                        addToConsole('✅ Контрагенты перезагружены');
+                        addLog(`• Контрагентов: ${scannerManager.allContractors.length}`);
+                        addLog(`• Выбрано: ${scannerManager.selectedContractors.length}`);
+                        addLog(`• Камера: ${scannerManager.isScanning ? '✅' : '❌'}`);
                     }
                     break;
+                    
                 case 'contractors':
-                    showContractorsDebug();
+                    if (window.scannerManager) {
+                        addLog('<strong>👥 Контрагенты:</strong>');
+                        scannerManager.allContractors.forEach(c => {
+                            addLog(`• ${c.name} (${c.category})`);
+                        });
+                    } else {
+                        addLog('❌ ScannerManager не доступен');
+                    }
                     break;
-                case 'storage':
-                    showStorageDebug();
+                    
+                case 'camera':
+                    addLog('<strong>📷 Проверка камеры:</strong>');
+                    if (navigator.mediaDevices) {
+                        navigator.mediaDevices.enumerateDevices()
+                            .then(devices => {
+                                const cameras = devices.filter(d => d.kind === 'videoinput');
+                                addLog(`• Найдено камер: ${cameras.length}`);
+                                cameras.forEach((cam, i) => {
+                                    addLog(`  ${i+1}. ${cam.label || 'Камера ' + (i+1)}`);
+                                });
+                            })
+                            .catch(error => {
+                                addLog(`❌ Ошибка: ${error.message}`);
+                            });
+                    } else {
+                        addLog('❌ mediaDevices не поддерживается');
+                    }
                     break;
-                case 'fix':
-                    fixScannerManagers();
+                    
+                case 'help':
+                    addLog('<strong>📋 Команды:</strong>');
+                    addLog('• <strong>debug</strong> - статус системы');
+                    addLog('• <strong>contractors</strong> - список контрагентов');
+                    addLog('• <strong>camera</strong> - проверка камеры');
+                    addLog('• <strong>clear</strong> - очистить консоль');
+                    addLog('• <strong>help</strong> - эта справка');
                     break;
+                    
                 case 'clear':
                     clearMobileConsole();
                     break;
-                case 'help':
-                    showScannerHelp();
-                    break;
-                case 'testscan':
-                    testScanFunctionality();
-                    break;
-                case 'reset':
-                    resetScannerData();
-                    break;
-                case 'manual':
-                    if (window.scannerManager) {
-                        scannerManager.showManualInputMode();
-                    }
-                    break;
-                case 'simulator':
-                    if (window.scannerManager) {
-                        scannerManager.useSimulatorMode();
-                    }
-                    break;
-                case 'browser':
-                    showBrowserInfo();
-                    break;
-                case 'debugsave':
-                    if (window.scannerManager) {
-                        scannerManager.debugSaveProcess();
-                    }
-                    break;
-                case 'checkbuttons':
-                    debugButtons();
-                    break;
-                case 'checkdom':
-                    checkContractorsDOM();
-                    break;
-                case 'checkscripts':
-                    checkScripts();
-                    break;
+                    
                 default:
                     if (command) {
-                        addToConsole(`❌ Неизвестная команда: "${command}"`);
-                        addToConsole('💡 Введите "help" для списка команд');
+                        addLog(`❌ Неизвестная команда: "${command}"`);
                     }
             }
         }
 
-        // функция информации о браузере
-        function showBrowserInfo() {
-            addToConsole('<strong>🌐 Информация о браузере:</strong>');
-            addToConsole(`• User Agent: ${navigator.userAgent}`);
-            addToConsole(`• Платформа: ${navigator.platform}`);
-            addToConsole(`• Язык: ${navigator.language}`);
-            addToConsole(`• Куки: ${navigator.cookieEnabled ? '✅' : '❌'}`);
-            addToConsole(`• Java: ${navigator.javaEnabled ? '✅' : '❌'}`);
-            addToConsole(`• Онлайн: ${navigator.onLine ? '✅' : '❌'}`);
-            addToConsole(`• mediaDevices: ${navigator.mediaDevices ? '✅' : '❌'}`);
-            
-            if (navigator.mediaDevices) {
-                addToConsole(`• getUserMedia: ${!!navigator.mediaDevices.getUserMedia ? '✅' : '❌'}`);
-                addToConsole(`• enumerateDevices: ${!!navigator.mediaDevices.enumerateDevices ? '✅' : '❌'}`);
-            }
-        }
-
-        function showScannerStatus() {
-            addToConsole('<strong>📊 Статус ScannerManager:</strong>');
-            addToConsole(`• Глобальная переменная: ${window.scannerManager ? '✅ Есть' : '❌ Нет'}`);
-            
-            if (window.scannerManager) {
-                addToConsole(`• Контрагентов: ${window.scannerManager.allContractors.length}`);
-                addToConsole(`• Выбрано: ${window.scannerManager.selectedContractors.length}`);
-                addToConsole(`• Камера: ${window.scannerManager.isScanning ? '✅ Активна' : '❌ Выключена'}`);
-            } else {
-                addToConsole('❌ ScannerManager не доступен');
-            }
-        }
-
-        function showScannerDebugInfo() {
-            console.log('=== SCANNER DEBUG INFO ===');
-            
-            addToConsole('<strong>📱 Информация о системе:</strong>');
-            addToConsole(`• Браузер: ${navigator.userAgent}`);
-            addToConsole(`• Экран: ${screen.width}x${screen.height}`);
-            addToConsole(`• Touch: ${'ontouchstart' in window ? 'Да' : 'Нет'}`);
-            addToConsole(`• mediaDevices: ${navigator.mediaDevices ? '✅' : '❌'}`);
-            addToConsole(`• Html5Qrcode: ${typeof Html5Qrcode !== 'undefined' ? '✅' : '❌'}`);
-            addToConsole(`• scannerManager: ${window.scannerManager ? '✅' : '❌'}`);
-            addToConsole(`• appState: ${window.appState ? '✅' : '❌'}`);
-            
-            if (window.scannerManager) {
-                addToConsole(`• Камера активна: ${scannerManager.isScanning ? '✅' : '❌'}`);
-                addToConsole(`• Контрагентов: ${scannerManager.allContractors.length}`);
-                addToConsole(`• Выбрано: ${scannerManager.selectedContractors.length}`);
-                if (appState && appState.getCurrentSession) {
-                    addToConsole(`• Отсканировано кодов: ${appState.getCurrentSession().scannedCodes.length}`);
-                }
-            }
-        }
-
-        function testCameraManually() {
-            addToConsole('📷 Тестируем камеру вручную...');
-            
-            if (!navigator.mediaDevices) {
-                addToConsole('❌ mediaDevices не поддерживается в этом браузере');
-                addToConsole('💡 Попробуйте современный браузер (Chrome, Firefox, Safari)');
-                return;
-            }
-            
-            navigator.mediaDevices.enumerateDevices()
-                .then(devices => {
-                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
-                    addToConsole(`📸 Найдено камер: ${videoDevices.length}`);
-                    
-                    videoDevices.forEach((device, index) => {
-                        addToConsole(`• Камера ${index + 1}: ${device.label || 'Без названия'} (ID: ${device.deviceId})`);
-                    });
-                    
-                    if (videoDevices.length === 0) {
-                        addToConsole('❌ Камеры не найдены или заблокированы');
-                        addToConsole('💡 Проверьте разрешения в настройках браузера');
-                    } else {
-                        addToConsole('✅ Камеры обнаружены, пробуем запустить...');
-                        
-                        navigator.mediaDevices.getUserMedia({ video: true })
-                            .then(stream => {
-                                addToConsole('✅ Доступ к камере получен!');
-                                
-                                stream.getTracks().forEach(track => track.stop());
-                                
-                                if (window.scannerManager) {
-                                    addToConsole('🔄 Запускаем камеру через ScannerManager...');
-                                    scannerManager.startCamera();
-                                } else {
-                                    addToConsole('❌ ScannerManager не доступен');
-                                }
-                            })
-                            .catch(error => {
-                                addToConsole(`❌ Ошибка доступа к камере: ${error.message}`);
-                                addToConsole('💡 Разрешите доступ к камере в настройках браузера');
-                            });
-                    }
-                })
-                .catch(error => {
-                    addToConsole(`❌ Ошибка получения устройств: ${error.message}`);
-                });
-        }
-
-        function showContractorsDebug() {
-            try {
-                const contractors = JSON.parse(localStorage.getItem('honest_sign_contractors') || '[]');
-                const selected = JSON.parse(localStorage.getItem('honest_sign_selected_contractors') || '{}');
-                
-                addToConsole('<strong>👥 Контрагенты в сканере:</strong>');
-                addToConsole(`• Всего: ${contractors.length}`);
-                addToConsole(`• Выбрано: ${selected.contractorIds ? selected.contractorIds.length : 0}`);
-                
-                if (contractors.length > 0) {
-                    contractors.forEach(contractor => {
-                        const isSelected = selected.contractorIds && selected.contractorIds.includes(contractor.id);
-                        addToConsole(`${isSelected ? '🎯 ' : '• '}${contractor.name} (ID: ${contractor.id})`);
-                    });
-                }
-                
-            } catch (error) {
-                addToConsole(`❌ Ошибка: ${error.message}`);
-            }
-        }
-
-        function showStorageDebug() {
-            addToConsole('<strong>🔍 Хранилища сканера:</strong>');
-            
-            const scannerKeys = [
-                'honest_sign_contractors',
-                'honest_sign_selected_contractors', 
-                'honest_sign_current_session',
-                'warehouse_reports',
-                'honest_sign_reports'
-            ];
-            
-            scannerKeys.forEach(key => {
-                const value = localStorage.getItem(key);
-                if (value) {
-                    try {
-                        const parsed = JSON.parse(value);
-                        addToConsole(`• ${key}: ${Array.isArray(parsed) ? parsed.length + ' элементов' : 'объект'}`);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            parsed.forEach((item, index) => {
-                                if (index < 3) {
-                                    addToConsole(`  ↳ ${item.name || item.id || 'элемент ' + index}`);
-                                }
-                            });
-                            if (parsed.length > 3) {
-                                addToConsole(`  ↳ ... и еще ${parsed.length - 3} элементов`);
-                            }
-                        }
-                    } catch {
-                        addToConsole(`• ${key}: ❌ Ошибка парсинга`);
-                    }
-                } else {
-                    addToConsole(`• ${key}: ❌ не найден`);
-                }
-            });
-            
-            if (window.scannerManager) {
-                addToConsole(`• Контрагентов в памяти: ${scannerManager.allContractors.length}`);
-            }
-        }
-
-        function fixScannerManagers() {
-            addToConsole('🔧 Исправляем менеджеры сканера...');
-            
-            if (!window.scannerManager && window.ScannerManager) {
-                try {
-                    window.scannerManager = new ScannerManager();
-                    addToConsole('✅ scannerManager создан');
-                } catch (error) {
-                    addToConsole(`❌ Ошибка: ${error.message}`);
-                }
-            } else {
-                addToConsole('ℹ️ scannerManager уже существует');
-            }
-            
-            if (!window.appState && window.AppState) {
-                try {
-                    window.appState = new AppState();
-                    addToConsole('✅ appState создан');
-                } catch (error) {
-                    addToConsole(`❌ Ошибка: ${error.message}`);
-                }
-            }
-        }
-
-        function testScanFunctionality() {
-            addToConsole('🧪 Тестируем функциональность сканирования...');
-            
-            if (!window.scannerManager) {
-                addToConsole('❌ scannerManager не доступен');
-                return;
-            }
-            
-            if (scannerManager.allContractors.length > 0) {
-                const testContractor = scannerManager.allContractors[0];
-                scannerManager.toggleContractor(testContractor.id);
-                addToConsole(`✅ Выбран контрагент: ${testContractor.name}`);
-            }
-            
-            setTimeout(() => {
-                scannerManager.simulateScan('0104604063405720219NQNfSwVmcTEST001');
-                addToConsole('✅ Тестовый код добавлен');
-            }, 500);
-        }
-
-        function resetScannerData() {
-            if (confirm('❌ УДАЛИТЬ ВСЕ ДАННЫЕ СКАНЕРА?')) {
-                try {
-                    localStorage.removeItem('honest_sign_current_session');
-                    localStorage.removeItem('honest_sign_selected_contractors');
-                    localStorage.removeItem('warehouse_reports');
-                    localStorage.removeItem('honest_sign_reports');
-                    
-                    addToConsole('✅ Данные сканера очищены');
-                    addToConsole('🔄 Обновите страницу');
-                    
-                } catch (error) {
-                    addToConsole(`❌ Ошибка: ${error.message}`);
-                }
-            }
-        }
-
-        function checkScripts() {
-            addToConsole('<strong>🔍 ПРОВЕРКА ЗАГРУЗКИ СКРИПТОВ:</strong>');
-            addToConsole(`• app-state.js: ${typeof AppState !== 'undefined' ? '✅ Загружен' : '❌ Не загружен'}`);
-            addToConsole(`• appState instance: ${typeof appState !== 'undefined' ? '✅ Создан' : '❌ Не создан'}`);
-            addToConsole(`• ScannerManager: ${typeof ScannerManager !== 'undefined' ? '✅ Загружен' : '❌ Не загружен'}`);
-            addToConsole(`• scannerManager: ${typeof scannerManager !== 'undefined' ? '✅ Создан' : '❌ Не создан'}`);
-            
-            // Также выводим в консоль браузера
-            console.log('🔍 ПРОВЕРКА ЗАГРУЗКИ СКРИПТОВ:');
-            console.log('- app-state.js:', typeof AppState !== 'undefined' ? '✅ Загружен' : '❌ Не загружен');
-            console.log('- appState instance:', typeof appState !== 'undefined' ? '✅ Создан' : '❌ Не создан');
-            console.log('- ScannerManager:', typeof ScannerManager !== 'undefined' ? '✅ Загружен' : '❌ Не загружен');
-            console.log('- scannerManager:', typeof scannerManager !== 'undefined' ? '✅ Создан' : '❌ Не создан');
-        }
-
-        function debugButtons() {
-            addToConsole('<strong>🔍 Проверка кнопок в index.html:</strong>');
-            const buttons = [
-                'addManualContractorBtn', 
-                'importContractorsBtn',
-                'startCamera',
-                'generateReport',
-                'clearSession',
-                'showSimulator'
-            ];
-            
-            buttons.forEach(id => {
-                const btn = document.getElementById(id);
-                addToConsole(`• ${id}: ${btn ? '✅ Найдена' : '❌ Не найдена'}`);
-            });
-            
-            // Также выводим в консоль браузера
-            console.log('🔍 Проверка кнопок в index.html:');
-            buttons.forEach(id => {
-                const btn = document.getElementById(id);
-                console.log(`• ${id}:`, btn ? '✅ Найдена' : '❌ Не найдена');
-            });
-        }
-
-        function checkContractorsDOM() {
-            addToConsole('<strong>🔍 ПРОВЕРКА DOM ДЛЯ КОНТРАГЕНТОВ:</strong>');
-            
-            const elements = [
-                'contractorManager',
-                'contractorsManagerList', 
-                'addContractorForm',
-                'contractorName',
-                'contractorCategory',
-                'importForm',
-                'importData'
-            ];
-            
-            elements.forEach(id => {
-                const element = document.getElementById(id);
-                if (element) {
-                    const style = window.getComputedStyle(element);
-                    addToConsole(`• ${id}: ✅ Найден (display: ${style.display})`);
-                } else {
-                    addToConsole(`• ${id}: ❌ Не найден`);
-                }
-            });
-            
-            // Также выводим в консоль браузера
-            console.log('🔍 ПРОВЕРКА DOM ДЛЯ КОНТРАГЕНТОВ:');
-            elements.forEach(id => {
-                const element = document.getElementById(id);
-                console.log(`• ${id}:`, element ? '✅ Найден' : '❌ Не найден');
-            });
-        }
-
-        function showScannerHelp() {
-            addToConsole('<strong>📋 Команды сканера:</strong>');
-            addToConsole('• <strong>debug</strong> - информация о системе');
-            addToConsole('• <strong>camera</strong> - тест камеры и разрешений');
-            addToConsole('• <strong>browser</strong> - информация о браузере');
-            addToConsole('• <strong>contractors</strong> - список контрагентов');
-            addToConsole('• <strong>storage</strong> - показать хранилища');
-            addToConsole('• <strong>debugsave</strong> - диагностика сохранения');
-            addToConsole('• <strong>manual</strong> - ручной ввод кодов');
-            addToConsole('• <strong>simulator</strong> - режим симулятора');
-            addToConsole('• <strong>fix</strong> - исправить менеджеры');
-            addToConsole('• <strong>testscan</strong> - тест сканирования');
-            addToConsole('• <strong>reset</strong> - очистить данные');
-            addToConsole('• <strong>checkbuttons</strong> - проверить кнопки');
-            addToConsole('• <strong>checkdom</strong> - проверить DOM элементы');
-            addToConsole('• <strong>checkscripts</strong> - проверить скрипты');
-            addToConsole('• <strong>clear</strong> - очистить консоль');
-            addToConsole('• <strong>help</strong> - эта справка');
-        }
-
-        function addToConsole(message) {
-            const consoleOutput = document.getElementById('consoleOutput');
-            if (consoleOutput) {
-                consoleOutput.innerHTML += `<div style="margin-bottom: 5px; line-height: 1.4;">${message}</div>`;
-                consoleOutput.scrollTop = consoleOutput.scrollHeight;
-            }
-        }
-
-        function clearMobileConsole() {
-            const consoleOutput = document.getElementById('consoleOutput');
-            if (consoleOutput) {
-                consoleOutput.innerHTML = '';
-            }
-        }
-
-        // Перехватываем console.log для сканера
+        // Перехват console.log для отображения в мобильной консоли
         const originalLog = console.log;
-        const originalError = console.error;
-        const originalWarn = console.warn;
-
         console.log = function(...args) {
             originalLog.apply(console, args);
             const message = args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+                typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
             ).join(' ');
-            addToConsole(`<span style="color: #00ff00">${message}</span>`);
-        };
-
-        console.error = function(...args) {
-            originalError.apply(console, args);
-            const message = args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' ');
-            addToConsole(`<span style="color: #ff4444">❌ ${message}</span>`);
-        };
-
-        console.warn = function(...args) {
-            originalWarn.apply(console, args);
-            const message = args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-            ).join(' ');
-            addToConsole(`<span style="color: #ffaa00">⚠️ ${message}</span>`);
+            const output = document.getElementById('consoleOutput');
+            if (output) {
+                output.innerHTML += `<div style="color: #00ff00; margin-bottom: 3px;">${message}</div>`;
+                output.scrollTop = output.scrollHeight;
+            }
         };
 
         // Инициализация при загрузке
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🔧 Мобильная консоль сканера инициализирована');
+            console.log('📄 Страница загружена');
             
-            // Добавляем обработчики событий
-            const consoleInput = document.getElementById('consoleInput');
-            if (consoleInput) {
-                consoleInput.addEventListener('keypress', handleConsoleInput);
-            }
-            
-            // Скрываем консоль по умолчанию
-            const consolePanel = document.getElementById('consolePanel');
-            if (consolePanel) {
-                consolePanel.style.display = 'none';
-            }
+            // Проверяем загрузку ScannerManager
+            setTimeout(() => {
+                if (!window.scannerManager) {
+                    console.error('❌ ScannerManager не инициализирован');
+                } else {
+                    console.log('✅ ScannerManager готов');
+                }
+            }, 1000);
         });
     </script>
 </body>
