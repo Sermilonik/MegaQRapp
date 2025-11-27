@@ -178,28 +178,33 @@
         </div>
     </div>
     
+    <!-- синхронизация данных -->
     <div class="card">
         <div class="card-header">
-            <h3>🔄 Синхронизация между устройствами</h3>
+            <h3>☁️ Синхронизация между устройствами</h3>
+            <span id="syncStatus" class="badge badge-warning">⏳ Загрузка...</span>
         </div>
         
         <div class="sync-actions">
             <button class="btn btn-outline" onclick="scannerManager.exportData()">
-                📤 Экспорт данных
+                📤 Экспорт в файл
             </button>
             <button class="btn btn-outline" onclick="scannerManager.importData()">
-                📥 Импорт данных
+                📥 Импорт из файла
             </button>
-            <button class="btn btn-outline" onclick="scannerManager.showQRCode()">
-                📱 Показать QR-код
+            <button class="btn btn-success" onclick="scannerManager.forceSync()" id="forceSyncBtn">
+                🔄 Синхронизировать
             </button>
-            <button class="btn btn-outline" onclick="scannerManager.scanQRCode()">
-                🔍 Сканировать QR-код
+            <button class="btn btn-info" onclick="scannerManager.toggleSync()" id="toggleSyncBtn">
+                ⚡ Автосинхронизация
             </button>
         </div>
         
-        <div style="margin-top: 15px; font-size: 12px; color: #666;">
-            <strong>💡 Подсказка:</strong> Используйте QR-коды для переноса данных между ПК и мобильным устройством
+        <div id="syncInfo" style="margin-top: 15px; font-size: 12px; color: #666;">
+            <div>📱 Firebase статус: <span id="firebaseStatus">Проверка...</span></div>
+            <div>👤 ID устройства: <span id="deviceId">-</span></div>
+            <div>🔄 Автосинхронизация: <span id="autoSyncStatus">-</span></div>
+            <div>🕐 Последняя синхронизация: <span id="lastSync">-</span></div>
         </div>
     </div>
     
@@ -295,6 +300,14 @@
         </div>
     </div>
 
+    <!-- Firebase SDK v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+
+    <!-- Firebase Configuration -->
+    <script src="js/firebase-config.js"></script>
+    <script src="js/firebase-sync.js"></script>
+
     <!-- ПОДКЛЮЧАЕМ СКРИПТЫ -->
     <script src="js/app-state.js"></script>
     <script src="js/utils.js"></script>
@@ -305,6 +318,17 @@
         function toggleMobileConsole() {
             const panel = document.getElementById('consolePanel');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Проверим доступен ли класс AppState
+        console.log('AppState class:', typeof AppState);
+        console.log('appState instance:', window.appState);
+
+        // Если класс доступен, создадим экземпляр
+        if (typeof AppState !== 'undefined' && !window.appState) {
+            console.log('🔄 Создаем AppState...');
+            window.appState = new AppState();
+            console.log('✅ AppState создан:', window.appState);
         }
 
         function clearMobileConsole() {
@@ -318,6 +342,31 @@
                 executeConsoleCommand(command);
             }
         }
+
+        // Функция для принудительной синхронизации всех данных
+        function forceSyncAll() {
+        console.log('🔄 Принудительная синхронизация всех данных...');
+        
+        // 1. Получаем контрагентов из localStorage
+        const contractors = JSON.parse(localStorage.getItem('honest_sign_contractors') || '[]');
+        console.log('📊 Локальные контрагенты:', contractors.length);
+        
+        // 2. Сохраняем в Firebase через AppState
+        if (window.appState && window.appState.syncWithFirebase) {
+            window.appState.syncWithFirebase()
+                .then(result => {
+                    console.log('✅ Синхронизация завершена:', result.length, 'контрагентов');
+                })
+                .catch(error => {
+                    console.error('❌ Ошибка синхронизации:', error);
+                });
+        } else {
+            console.error('❌ AppState не доступен');
+        }
+    }
+
+        // Запускаем синхронизацию
+        forceSyncAll();
 
         function executeConsoleCommand(command) {
             const output = document.getElementById('consoleOutput');
