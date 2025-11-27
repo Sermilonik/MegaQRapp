@@ -43,6 +43,11 @@ class ScannerManager {
         // Проверяем камеру
         await this.checkCameraAvailability();
         
+        // Обновляем UI синхронизации
+        setTimeout(() => {
+            this.updateSyncUI();
+        }, 3000);
+        
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
     }
@@ -62,13 +67,23 @@ class ScannerManager {
     loadContractors() {
         console.log('🔍 ScannerManager: Загрузка контрагентов');
         
-        // Даем время на инициализацию appState
+        // Ждем инициализации AppState
         if (window.appState && window.appState.getAllContractors) {
             this.allContractors = window.appState.getAllContractors();
             console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов из AppState`);
         } else {
             console.warn('⚠️ ScannerManager: AppState не доступен, загружаем напрямую из localStorage');
-            this.loadContractorsDirectly();
+            
+            // Пробуем инициализировать AppState если он есть
+            if (typeof AppState !== 'undefined' && !window.appState) {
+                console.log('🔄 ScannerManager: Пробуем создать AppState...');
+                window.appState = new AppState();
+                this.allContractors = window.appState.getAllContractors();
+                console.log(`✅ ScannerManager: Создан AppState, загружено ${this.allContractors.length} контрагентов`);
+            } else {
+                // Резервный метод
+                this.loadContractorsDirectly();
+            }
         }
         
         this._contractorsLoaded = true;
@@ -837,7 +852,7 @@ class ScannerManager {
         });
     }
 
-    // СИНХРОНИЗАЦИЯ ДАННЫХ (правильное расположение в конце класса)
+    // СИНХРОНИЗАЦИЯ ДАННЫХ
     exportData() {
         if (!window.appState) {
             showError('AppState не доступен');
@@ -856,6 +871,89 @@ class ScannerManager {
         URL.revokeObjectURL(url);
         
         showSuccess('Данные экспортированы в файл', 3000);
+    }
+
+    // СИНХРОНИЗАЦИЯ ДАННЫХ
+    async forceSync() {
+        console.log('🔄 Принудительная синхронизация...');
+        
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        showInfo('🔄 Синхронизация с облаком...', 3000);
+        
+        try {
+            const syncedContractors = await window.appState.syncWithFirebase();
+            
+            if (syncedContractors) {
+                // Обновляем локальные данные
+                this.allContractors = syncedContractors;
+                this.loadContractorsManagerList();
+                this.updateSelectedContractorsUI();
+                
+                showSuccess(`✅ Синхронизировано ${syncedContractors.length} контрагентов`, 5000);
+                this.updateSyncUI();
+            }
+        } catch (error) {
+            console.error('❌ Ошибка синхронизации:', error);
+            showError('Ошибка синхронизации: ' + error.message);
+        }
+    }
+
+    toggleSync() {
+        if (!window.appState || !window.appState.firebaseSync) {
+            showError('Firebase синхронизация не доступна');
+            return;
+        }
+        
+        const currentStatus = window.appState.firebaseSync.syncEnabled;
+        window.appState.firebaseSync.setSyncEnabled(!currentStatus);
+        
+        showSuccess(`Автосинхронизация ${!currentStatus ? 'включена' : 'выключена'}`, 3000);
+        this.updateSyncUI();
+    }
+
+    updateSyncUI() {
+        if (!window.appState || !window.appState.firebaseSync) return;
+        
+        const status = window.appState.firebaseSync.getSyncStatus();
+        const syncStatus = document.getElementById('syncStatus');
+        const firebaseStatus = document.getElementById('firebaseStatus');
+        const deviceId = document.getElementById('deviceId');
+        const toggleBtn = document.getElementById('toggleSyncBtn');
+        const forceSyncBtn = document.getElementById('forceSyncBtn');
+        
+        if (syncStatus) {
+            if (status.isConnected && status.syncEnabled) {
+                syncStatus.textContent = '✅ Включена';
+                syncStatus.className = 'badge badge-success';
+            } else if (status.isConnected) {
+                syncStatus.textContent = '⏸️ Выключена';
+                syncStatus.className = 'badge badge-warning';
+            } else {
+                syncStatus.textContent = '❌ Ошибка';
+                syncStatus.className = 'badge badge-danger';
+            }
+        }
+        
+        if (firebaseStatus) {
+            firebaseStatus.textContent = status.isConnected ? '✅ Подключено' : '❌ Ошибка';
+            firebaseStatus.style.color = status.isConnected ? '#28a745' : '#dc3545';
+        }
+        
+        if (deviceId) {
+            deviceId.textContent = status.userId ? status.userId.substring(0, 10) + '...' : '-';
+        }
+        
+        if (toggleBtn) {
+            toggleBtn.textContent = status.syncEnabled ? '⏸️ Выключить синхронизацию' : '⚡ Включить синхронизацию';
+        }
+        
+        if (forceSyncBtn) {
+            forceSyncBtn.disabled = !status.isConnected;
+        }
     }
 
     importData() {
@@ -1004,6 +1102,21 @@ class ScannerManager {
         }
     }
 }
+
+// Глобальная функция для тестирования синхронизации
+function testSync() {
+    if (window.appState && window.appState.firebaseSync) {
+        console.log('🧪 Тест синхронизации...');
+        window.appState.syncWithFirebase().then(result => {
+            console.log('✅ Результат синхронизации:', result);
+        });
+    } else {
+        console.error('❌ AppState или FirebaseSync не доступны');
+    }
+}
+
+// Сделать функцию глобально доступной
+window.testSync = testSync;
 
 // ИНИЦИАЛИЗАЦИЯ
 document.addEventListener('DOMContentLoaded', function() {
