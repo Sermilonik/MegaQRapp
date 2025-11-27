@@ -11,14 +11,117 @@ class AppState {
         this.sentSessions = [];
         this.reports = [];
         this.reportCounter = 1;
+        this.firebaseSync = null;
         
         this.init();
     }
     
-    init() {
+    async init() {
         this.loadContractors();
         this.loadFromStorage();
-        this.ensureDefaultContractors(); // Теперь этот метод существует
+        this.ensureDefaultContractors();
+        
+        // Инициализируем Firebase синхронизацию
+        await this.initFirebaseSync();
+    }
+
+    // Инициализация Firebase синхронизации
+    async initFirebaseSync() {
+        console.log('🔄 AppState: Инициализация Firebase синхронизации...');
+        
+        if (typeof initFirebaseSync === 'function') {
+            try {
+                // Ждем инициализации FirebaseSyncManager
+                let attempts = 0;
+                while (attempts < 10) {
+                    this.firebaseSync = initFirebaseSync();
+                    if (this.firebaseSync && this.firebaseSync.isConnected) {
+                        console.log('✅ AppState: Firebase синхронизация активирована');
+                        break;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    attempts++;
+                }
+                
+                if (this.firebaseSync && this.firebaseSync.isConnected) {
+                    // Синхронизируем данные при старте
+                    setTimeout(async () => {
+                        await this.syncWithFirebase();
+                    }, 3000);
+                } else {
+                    console.log('ℹ️ AppState: Firebase синхронизация недоступна');
+                }
+            } catch (error) {
+                console.error('❌ AppState: Ошибка инициализации Firebase:', error);
+                this.firebaseSync = null;
+            }
+        } else {
+            console.log('ℹ️ AppState: Модуль FirebaseSync не загружен');
+        }
+    }
+
+    // Синхронизация с Firebase
+    async syncWithFirebase() {
+        console.log('🔄 AppState: Синхронизация с Firebase...');
+        
+        if (!this.firebaseSync || !this.firebaseSync.isConnected) {
+            console.log('🔄 AppState: Firebase не доступен');
+            return this.contractors;
+        }
+    
+        try {
+            // Загружаем данные из Firebase
+            const cloudContractors = await this.firebaseSync.loadFromFirebase();
+            
+            if (!cloudContractors || cloudContractors.length === 0) {
+                console.log('☁️ В облаке нет данных, сохраняем локальные...');
+                await this.firebaseSync.saveContractorsToFirebase(this.contractors);
+                return this.contractors;
+            }
+    
+            // Объединяем данные
+            const mergedContractors = this.mergeContractors(this.contractors, cloudContractors);
+            
+            // Сохраняем объединенные данные обратно
+            await this.firebaseSync.saveContractorsToFirebase(mergedContractors);
+            
+            // Обновляем локальные данные
+            this.contractors = mergedContractors;
+            this.saveContractors();
+            
+            console.log(`🔄 Синхронизация завершена. Результат: ${mergedContractors.length} контрагентов`);
+            
+            return mergedContractors;
+    
+        } catch (error) {
+            console.error('❌ AppState: Ошибка синхронизации с Firebase:', error);
+            return this.contractors;
+        }
+    }
+
+    // Метод объединения контрагентов
+    mergeContractors(local, cloud) {
+        console.log('🔄 Объединение данных...');
+        
+        // Создаем карту для быстрого поиска
+        const contractorsMap = new Map();
+        
+        // Добавляем локальные контрагенты
+        local.forEach(contractor => {
+            contractorsMap.set(contractor.id, contractor);
+        });
+        
+        // Добавляем облачные контрагенты (приоритет у более новых)
+        cloud.forEach(cloudContractor => {
+            if (!contractorsMap.has(cloudContractor.id)) {
+                contractorsMap.set(cloudContractor.id, cloudContractor);
+            }
+        });
+        
+        const merged = Array.from(contractorsMap.values());
+        console.log(`📊 Объединение завершено. Локально: ${local.length}, Облако: ${cloud.length}, Результат: ${merged.length}`);
+        
+        return merged.sort((a, b) => a.id - b.id);
     }
     
     // Гарантируем наличие контрагентов по умолчанию
