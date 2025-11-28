@@ -714,41 +714,78 @@ class ScannerManager {
     }
 
     // ОТЧЕТЫ
-    generateReport() {
-        if (!appState) {
+    async generateReport() {
+        console.log('📄 Формирование отчета...');
+        
+        if (!window.appState) {
             showError('❌ AppState не доступен');
             return;
         }
-
-        const session = appState.getCurrentSession();
         
-        if (session.scannedCodes.length === 0) {
-            showError('❌ Нет кодов для отчета');
+        const session = window.appState.getCurrentSession();
+        const codesCount = session.scannedCodes.length;
+        const contractorsCount = this.selectedContractors.length;
+        
+        // ПРОВЕРКА 1: Есть ли коды
+        if (codesCount === 0) {
+            showError('❌ Нет отсканированных кодов для отчета');
             return;
         }
-
-        if (this.selectedContractors.length === 0) {
-            showError('❌ Нет выбранных контрагентов');
+        
+        // ПРОВЕРКА 2: Выбраны ли контрагенты
+        if (contractorsCount === 0) {
+            showError('❌ Не выбраны контрагенты');
             return;
         }
-
-        const report = {
-            id: Date.now(),
-            contractorName: this.selectedContractors.map(c => c.name).join(', '),
-            contractors: [...this.selectedContractors],
-            codes: [...session.scannedCodes],
-            createdAt: new Date().toISOString(),
-            status: 'pending'
-        };
-
-        appState.saveReport(report);
-        showSuccess(`✅ Отчет создан! Кодов: ${session.scannedCodes.length}`, 5000);
         
-        // Очищаем сессию
-        this.clearSession();
+        // ПРОВЕРКА 3: Достаточно ли кодов для контрагентов
+        if (codesCount < contractorsCount) {
+            showError(`❌ Недостаточно кодов! Отсканировано: ${codesCount}, нужно минимум: ${contractorsCount}`);
+            return;
+        }
         
-        // Обновляем список отчетов
-        this.loadReportsList();
+        showInfo('📄 Формирование PDF отчета...', 3000);
+        
+        try {
+            // Создаем данные для отчета
+            const reportData = {
+                id: Date.now().toString(),
+                sequentialNumber: window.appState.reportCounter,
+                contractorName: this.selectedContractors.map(c => c.name).join(', '),
+                contractors: [...this.selectedContractors],
+                codes: [...session.scannedCodes],
+                createdAt: new Date().toISOString(),
+                status: 'created'
+            };
+            
+            console.log('📊 Данные для отчета:', reportData);
+            
+            // Генерируем PDF
+            const pdfBytes = await pdfGenerator.generateReport(reportData);
+            
+            // Скачиваем PDF
+            const filename = `scan_report_${new Date().toISOString().split('T')[0]}_${reportData.sequentialNumber}.pdf`;
+            const success = pdfGenerator.downloadPDF(pdfBytes, filename);
+            
+            if (success) {
+                // Сохраняем отчет в историю
+                window.appState.saveReport(reportData);
+                
+                // Очищаем сессию
+                this.clearSession();
+                
+                // Обновляем историю отчетов
+                this.loadReportsList();
+                
+                showSuccess(`✅ Отчет создан! Файл: ${filename}`, 5000);
+            } else {
+                showError('❌ Ошибка при скачивании отчета');
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка формирования отчета:', error);
+            showError('Ошибка создания отчета: ' + error.message);
+        }
     }
 
     clearSession() {
@@ -845,13 +882,39 @@ class ScannerManager {
 
     updateButtonStates() {
         const hasContractors = this.selectedContractors.length > 0;
-        const hasCodes = appState && appState.getCurrentSession().scannedCodes.length > 0;
+        const hasCodes = window.appState && window.appState.getCurrentSession().scannedCodes.length > 0;
+        
+        // НОВАЯ ЛОГИКА: кнопка активна только если есть контрагенты И коды
+        // И количество кодов >= количеству контрагентов
+        const codesCount = window.appState ? window.appState.getCurrentSession().scannedCodes.length : 0;
+        const contractorsCount = this.selectedContractors.length;
+        
+        const canGenerateReport = hasContractors && 
+                                 hasCodes && 
+                                 codesCount >= contractorsCount;
         
         const startCamera = document.getElementById('startCamera');
         const generateReport = document.getElementById('generateReport');
         
         if (startCamera) startCamera.disabled = !hasContractors;
-        if (generateReport) generateReport.disabled = !hasContractors || !hasCodes;
+        if (generateReport) {
+            generateReport.disabled = !canGenerateReport;
+            
+            // Добавляем подсказку если кнопка неактивна
+            if (!canGenerateReport) {
+                if (!hasContractors) {
+                    generateReport.title = 'Выберите контрагентов';
+                } else if (!hasCodes) {
+                    generateReport.title = 'Нет отсканированных кодов';
+                } else if (codesCount < contractorsCount) {
+                    generateReport.title = `Недостаточно кодов: ${codesCount} из ${contractorsCount}`;
+                }
+            } else {
+                generateReport.title = `Сформировать отчет (${codesCount} кодов)`;
+            }
+        }
+        
+        console.log(`🔘 Состояние кнопок: контрагенты=${hasContractors}, коды=${hasCodes}, можно_сформировать=${canGenerateReport}`);
     }
 
     updateCodesList() {
@@ -1300,6 +1363,27 @@ function forceDataAlignment() {
     } else {
         console.error('❌ ScannerManager не доступен');
     }
+}
+
+function checkReportButton() {
+    const btn = document.getElementById('generateReport');
+    const appState = window.appState;
+    const scanner = window.scannerManager;
+    
+    if (!btn || !appState || !scanner) {
+        console.error('❌ Не все компоненты доступны');
+        return;
+    }
+    
+    const session = appState.getCurrentSession();
+    const codesCount = session.scannedCodes.length;
+    const contractorsCount = scanner.selectedContractors.length;
+    
+    console.log('🔍 Проверка кнопки отчета:');
+    console.log('- Коды:', codesCount);
+    console.log('- Контрагенты:', contractorsCount);
+    console.log('- Кнопка disabled:', btn.disabled);
+    console.log('- Можно формировать отчет:', codesCount >= contractorsCount && codesCount > 0 && contractorsCount > 0);
 }
 
 // Сделать функцию глобально доступной
