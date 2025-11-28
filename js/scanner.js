@@ -486,15 +486,14 @@ class ScannerManager {
             
             this.scanner = new Html5Qrcode("reader");
             
+            // МИНИМАЛЬНАЯ КОНФИГУРАЦИЯ - убираем все ограничения
             const config = {
-                fps: 5, // Меньше FPS = меньше ошибок
+                fps: 10,
                 qrbox: { width: 250, height: 250 },
                 aspectRatio: 1.0
             };
     
-            // Улучшенный обработчик ошибок
-            const verbose = false; // Убираем лишние логи
-            
+            // ПРОСТАЯ обработка - без фильтрации ошибок
             await this.scanner.start(
                 { facingMode: "environment" },
                 config,
@@ -503,19 +502,14 @@ class ScannerManager {
                     this.onScanSuccess(decodedText);
                 },
                 (error) => {
-                    // Фильтруем только важные ошибки
-                    if (!error.includes('NotFoundException') && 
-                        !error.includes('No barcode') &&
-                        !error.includes('No MultiFormat')) {
-                        console.log('📷 Ошибка сканирования:', error);
-                    }
-                },
-                verbose // Отключаем подробное логирование
+                    // Игнорируем ВСЕ ошибки сканирования - это нормально
+                    // Библиотека сама обработает форматы
+                }
             );
     
             this.isScanning = true;
             this.updateCameraUI();
-            showSuccess('📷 Камера запущена!', 3000);
+            showSuccess('📷 Камера запущена! Наведите на DataMatrix код', 3000);
     
         } catch (error) {
             console.error('❌ Ошибка запуска камеры:', error);
@@ -571,12 +565,7 @@ class ScannerManager {
     }
 
     onScanSuccess(decodedText) {
-        console.log('🔍 Обработка сканированного кода:', decodedText);
-        
-        if (!this.isValidCodeFormat(decodedText)) {
-            showError('❌ Неподдерживаемый формат кода');
-            return;
-        }
+        console.log('🔍 Обработка сканированного DataMatrix кода');
         
         // Сначала проверяем, это ли данные синхронизации
         if (this.handleSyncQRCode(decodedText)) {
@@ -588,15 +577,16 @@ class ScannerManager {
             return;
         }
     
-        // Детальная проверка дубликатов
-        if (window.appState && window.appState.hasCodeBeenScanned) {
-            const isDuplicate = window.appState.hasCodeBeenScanned(decodedText);
-            console.log(`🔍 Проверка дубликата: ${decodedText} - ${isDuplicate ? 'ДУБЛИКАТ' : 'НОВЫЙ'}`);
-            
-            if (isDuplicate) {
-                showWarning('⚠️ Этот код уже отсканирован');
-                return;
-            }
+        // Базовая проверка формата
+        if (!this.isValidCodeFormat(decodedText)) {
+            showError('❌ Неподдерживаемый формат кода');
+            return;
+        }
+    
+        // Проверка дубликатов
+        if (window.appState && window.appState.hasCodeBeenScanned(decodedText)) {
+            showWarning('⚠️ Этот код уже отсканирован');
+            return;
         }
     
         const scannedCode = {
@@ -605,8 +595,6 @@ class ScannerManager {
             contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
         };
         
-        console.log('💾 Добавление кода в AppState:', scannedCode);
-        
         if (window.appState) {
             window.appState.addScannedCode(decodedText);
         }
@@ -614,9 +602,9 @@ class ScannerManager {
         this.addCodeToList(scannedCode);
         this.updateUI();
         
-        showSuccess(`✅ Код добавлен: ${this.formatCode(decodedText)}`, 2000);
+        showSuccess(`✅ DataMatrix код добавлен`, 2000);
         
-        // Виброотклик на мобильных (если поддерживается)
+        // Виброотклик на мобильных
         if (navigator.vibrate) {
             navigator.vibrate(200);
         }
@@ -624,26 +612,20 @@ class ScannerManager {
 
     // метод проверки форматов
     isValidCodeFormat(code) {
-        // Проверяем, что код не пустой и имеет минимальную длину
-        if (!code || code.length < 5) {
+        // ПРИНИМАЕМ ЛЮБЫЕ КОДЫ которые сканирует библиотека
+        if (!code || code.trim().length === 0) {
+            console.log('❌ Пустой код');
+            return false;
+        }
+        
+        // DataMatrix коды обычно от 10 символов
+        if (code.length < 10) {
             console.log('❌ Слишком короткий код:', code);
             return false;
         }
         
-        // Проверяем на базовые форматы
-        const patterns = [
-            /^[0-9A-Za-z]{10,}$/, // Обычные QR/DataMatrix
-            /^01\d{14}21[A-Za-z0-9]{13,}$/, // GS1 DataMatrix
-            /^[A-Za-z0-9+/=]{20,}$/, // Base64-like коды
-        ];
-        
-        const isValid = patterns.some(pattern => pattern.test(code));
-        
-        if (!isValid) {
-            console.log('❌ Неподдерживаемый формат кода:', code);
-        }
-        
-        return isValid;
+        console.log('✅ Принят код формата DataMatrix:', code.substring(0, 20) + '...');
+        return true;
     }
 
     addCodeToList(scannedCode) {
