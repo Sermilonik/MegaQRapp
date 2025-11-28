@@ -1026,6 +1026,43 @@ class ScannerManager {
         return false;
     }
 
+    // Принудительное выравнивание данных с облаком
+    forceDataAlignment() {
+        console.log('🔄 Принудительное выравнивание данных...');
+        
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        showInfo('🔄 Выравнивание данных с облаком...', 5000);
+        
+        try {
+            // 1. Очищаем локальные данные
+            localStorage.removeItem('honest_sign_contractors');
+            console.log('✅ Локальные данные очищены');
+            
+            // 2. Перезагружаем AppState
+            window.appState.loadContractors();
+            console.log('✅ AppState перезагружен');
+            
+            // 3. Синхронизируем с Firebase
+            window.appState.syncWithFirebase().then((result) => {
+                // 4. Обновляем ScannerManager
+                this.allContractors = result;
+                this.loadContractorsManagerList();
+                this.updateSelectedContractorsUI();
+                
+                showSuccess(`✅ Данные выровнены с облаком: ${result.length} контрагентов`, 5000);
+                console.log('✅ Выравнивание завершено');
+            });
+            
+        } catch (error) {
+            console.error('❌ Ошибка выравнивания данных:', error);
+            showError('Ошибка выравнивания: ' + error.message);
+        }
+    }
+
     // ОБРАБОТЧИКИ СОБЫТИЙ
     setupEventListeners() {
         console.log('🔧 Настройка обработчиков событий');
@@ -1117,6 +1154,17 @@ function testSync() {
 
 // Сделать функцию глобально доступной
 window.testSync = testSync;
+
+function forceDataAlignment() {
+    if (window.scannerManager) {
+        window.scannerManager.forceDataAlignment();
+    } else {
+        console.error('❌ ScannerManager не доступен');
+    }
+}
+
+// Сделать функцию глобально доступной
+window.forceDataAlignment = forceDataAlignment;
 
 // ИНИЦИАЛИЗАЦИЯ
 document.addEventListener('DOMContentLoaded', function() {
