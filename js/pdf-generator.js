@@ -17,42 +17,46 @@ class PDFGenerator {
             return cleanCode;
         }
 
-    async generateReport(reportData) {
-        console.log('📄 Generating PDF report:', reportData);
-        
-        try {
-            // Проверяем доступность библиотек
-            if (typeof jspdf === 'undefined') {
-                throw new Error('jspdf библиотека не загружена');
+        async generateReport(reportData) {
+            console.log('📄 Generating PDF report:', reportData);
+            
+            try {
+                if (typeof jspdf === 'undefined') {
+                    throw new Error('jspdf библиотека не загружена');
+                }
+                
+                const { jsPDF } = jspdf;
+                
+                // ИСПРАВЬТЕ создание документа - добавьте поддержку кириллицы:
+                const doc = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+                
+                // ДОБАВЬТЕ этот код для поддержки кириллицы:
+                doc.setLanguage('ru');
+                
+                // Основная информация с исправленными шрифтами
+                await this.addHeader(doc, reportData);
+                await this.addReportInfo(doc, reportData);
+                await this.addContractorsInfo(doc, reportData);
+                await this.addCodesTable(doc, reportData);
+                
+                // DataMatrix коды
+                if (typeof bwipjs !== 'undefined') {
+                    await this.addDataMatrixCodes(doc, reportData);
+                } else {
+                    this.addNoDataMatrixMessage(doc);
+                }
+                
+                return doc.output('arraybuffer');
+                
+            } catch (error) {
+                console.error('❌ PDF generation error:', error);
+                throw error;
             }
-            
-            if (typeof bwipjs === 'undefined') {
-                console.warn('⚠️ bwip-js не доступен, DataMatrix коды не будут сгенерированы');
-            }
-            
-            const { jsPDF } = jspdf;
-            const doc = new jsPDF();
-            
-            // Основная информация
-            this.addHeader(doc, reportData);
-            this.addReportInfo(doc, reportData);
-            this.addContractorsInfo(doc, reportData);
-            this.addCodesTable(doc, reportData);
-            
-            // Пробуем добавить DataMatrix коды если библиотека доступна
-            if (typeof bwipjs !== 'undefined') {
-                await this.addDataMatrixCodes(doc, reportData);
-            } else {
-                this.addNoDataMatrixMessage(doc);
-            }
-            
-            return doc.output('arraybuffer');
-            
-        } catch (error) {
-            console.error('❌ PDF generation error:', error);
-            throw error;
         }
-    }
     
     // ДОБАВЬТЕ этот метод в pdf-generator.js
     addNoDataMatrixMessage(doc) {
@@ -65,6 +69,9 @@ class PDFGenerator {
     }
 
     addHeader(doc, reportData) {
+        // Установите стандартный шрифт, поддерживающий кириллицу
+        doc.setFont('helvetica', 'normal');
+        
         // Заголовок
         doc.setFontSize(18);
         doc.setTextColor(40, 40, 40);
@@ -197,14 +204,17 @@ class PDFGenerator {
         // Новая страница для DataMatrix
         doc.addPage();
         
+        doc.setFont('helvetica', 'normal');
         doc.setFontSize(16);
         doc.text('DATA MATRIX КОДЫ ДЛЯ ПЕЧАТИ', 105, 20, { align: 'center' });
         
-        let xPosition = 20;
+        let xPosition = 25;
         let yPosition = 40;
-        const dmSize = 40;
-        const spacing = 15;
-        const codesPerRow = 4;
+        const dmSize = 35; // УМЕНЬШИТЕ размер для лучшего размещения
+        const spacing = 10;
+        const codesPerRow = 3; // УМЕНЬШИТЕ количество в строке
+        
+        let codesGenerated = 0;
         
         for (let i = 0; i < reportData.codes.length; i++) {
             const code = reportData.codes[i];
@@ -212,39 +222,69 @@ class PDFGenerator {
             
             // Новая строка
             if (i > 0 && i % codesPerRow === 0) {
-                xPosition = 20;
-                yPosition += dmSize + 25;
+                xPosition = 25;
+                yPosition += dmSize + 20;
             }
             
-            // Новая страница
-            if (yPosition + dmSize + 20 > 270) {
+            // Новая страница если не хватает места
+            if (yPosition + dmSize + 30 > 270) {
                 doc.addPage();
+                doc.setFont('helvetica', 'normal');
                 doc.setFontSize(16);
                 doc.text('DATA MATRIX КОДЫ ДЛЯ ПЕЧАТИ (ПРОДОЛЖЕНИЕ)', 105, 20, { align: 'center' });
                 yPosition = 40;
-                xPosition = 20;
+                xPosition = 25;
             }
             
             // Генерируем DataMatrix
+            console.log(`🔷 Генерация DataMatrix ${i + 1}/${reportData.codes.length}`);
             const dataMatrixUrl = await this.generateDataMatrix(codeValue);
             
             if (dataMatrixUrl) {
-                // DataMatrix изображение
-                doc.addImage(dataMatrixUrl, 'PNG', xPosition, yPosition, dmSize, dmSize);
-                
-                // Текст под кодом
-                doc.setFontSize(8);
-                doc.text(`${i + 1}`, xPosition + dmSize/2, yPosition + dmSize + 4, { align: 'center' });
-                doc.text(this.formatCodeShort(codeValue), xPosition + dmSize/2, yPosition + dmSize + 8, { align: 'center' });
-                
-                xPosition += dmSize + spacing;
+                try {
+                    // Добавляем DataMatrix изображение
+                    doc.addImage(dataMatrixUrl, 'PNG', xPosition, yPosition, dmSize, dmSize);
+                    codesGenerated++;
+                    
+                    // Текст под кодом
+                    doc.setFontSize(8);
+                    doc.text(`${i + 1}`, xPosition + dmSize/2, yPosition + dmSize + 4, { align: 'center' });
+                    
+                    // Сокращенный код
+                    const shortCode = this.formatCodeShort(codeValue);
+                    if (shortCode.length > 12) {
+                        // Разбиваем длинный код на две строки
+                        const firstPart = shortCode.substring(0, 12);
+                        const secondPart = shortCode.substring(12);
+                        doc.text(firstPart, xPosition + dmSize/2, yPosition + dmSize + 8, { align: 'center' });
+                        doc.text(secondPart, xPosition + dmSize/2, yPosition + dmSize + 12, { align: 'center' });
+                    } else {
+                        doc.text(shortCode, xPosition + dmSize/2, yPosition + dmSize + 8, { align: 'center' });
+                    }
+                    
+                    xPosition += dmSize + spacing;
+                    
+                } catch (imageError) {
+                    console.error(`❌ Ошибка добавления изображения ${i + 1}:`, imageError);
+                    // Показываем текст вместо изображения
+                    this.addCodeAsText(doc, codeValue, xPosition, yPosition, i);
+                    xPosition += 80;
+                }
             } else {
                 // Если не удалось сгенерировать DataMatrix, показываем текст
-                doc.setFontSize(10);
-                doc.text(`${i + 1}. ${this.formatCodeForDisplay(codeValue)}`, xPosition, yPosition + dmSize/2);
+                this.addCodeAsText(doc, codeValue, xPosition, yPosition, i);
                 xPosition += 80;
             }
         }
+        
+        console.log(`✅ Сгенерировано DataMatrix кодов: ${codesGenerated}/${reportData.codes.length}`);
+    }
+    
+    // ДОБАВЬТЕ этот вспомогательный метод
+    addCodeAsText(doc, code, x, y, index) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+        doc.text(`${index + 1}. ${this.formatCodeForDisplay(code)}`, x, y + 15);
     }
 
     async generateDataMatrix(data) {
@@ -257,19 +297,30 @@ class PDFGenerator {
                 }
                 
                 const canvas = document.createElement('canvas');
-                canvas.width = 100;
-                canvas.height = 100;
+                // УВЕЛИЧЬТЕ размер для лучшего качества
+                canvas.width = 200;
+                canvas.height = 200;
                 
-                // Упрощенная генерация DataMatrix
+                // УЛУЧШЕННЫЕ НАСТРОЙКИ DataMatrix
                 bwipjs.toCanvas(canvas, {
-                    bcid: 'datamatrix',
-                    text: data,
-                    scale: 3,
-                    includetext: false,
+                    bcid: 'datamatrix',       // Тип кода
+                    text: data,               // Данные
+                    scale: 3,                 // Масштаб
+                    height: 10,               // Высота
+                    width: 10,                // Ширина
+                    includetext: false,       // Не показывать текст
+                    textxalign: 'center',     // Выравнивание
                 });
                 
                 console.log('✅ DataMatrix generated successfully');
-                resolve(canvas.toDataURL('image/png'));
+                
+                // Проверяем что canvas не пустой
+                if (canvas.width > 0 && canvas.height > 0) {
+                    resolve(canvas.toDataURL('image/png'));
+                } else {
+                    console.warn('⚠️ Canvas пустой');
+                    resolve(null);
+                }
                 
             } catch (error) {
                 console.error('❌ Data Matrix generation failed:', error);
@@ -277,7 +328,6 @@ class PDFGenerator {
             }
         });
     }
-
     formatCodeShort(code) {
         if (!code) return 'N/A';
         
