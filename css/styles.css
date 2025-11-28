@@ -1261,3 +1261,32 @@ h1 {
     max-height: 90%;
     overflow: auto;
 }
+
+.scanning-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    height: 200px;
+    border: 3px solid #00ff00;
+    border-radius: 10px;
+    animation: pulse 2s infinite;
+    pointer-events: none;
+    z-index: 20;
+}
+
+@keyframes pulse {
+    0% { border-color: #00ff00; }
+    50% { border-color: #007bff; }
+    100% { border-color: #00ff00; }
+}
+
+.scan-success {
+    animation: successFlash 0.5s;
+}
+
+@keyframes successFlash {
+    0% { background-color: rgba(0, 255, 0, 0.3); }
+    100% { background-color: transparent; }
+}
