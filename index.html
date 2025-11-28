@@ -311,15 +311,16 @@
     <script src="js/firebase-config.js"></script>
     <script src="js/firebase-sync.js"></script>
 
+    <!-- Библиотеки для PDF генерации -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js"></script>
+
     <!-- ПОДКЛЮЧАЕМ СКРИПТЫ -->
     <script src="js/app-state.js"></script>
     <script src="js/utils.js"></script>
-    <script src="js/pdf-generator.js"></script>
+    <script src="js/pdfmake-generator.js"></script>
+    <script src="js/simple-qr-generator.js"></script>
     <script src="js/scanner.js"></script>
-
-    <!-- Библиотеки для PDF генерации -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bwip-js@4.2.2/dist/bwip-js.min.js"></script>
 
     <script>
         // ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТЛАДКИ
@@ -396,6 +397,15 @@
                         addLog(`• Выбрано: ${scannerManager.selectedContractors.length}`);
                         addLog(`• Камера: ${scannerManager.isScanning ? '✅' : '❌'}`);
                     }
+                    break;
+
+                case 'libs':
+                    addLog('<strong>📦 Статус библиотек:</strong>');
+                    addLog(`• jspdf: ${typeof jspdf !== 'undefined' ? '✅' : '❌'}`);
+                    addLog(`• bwipjs: ${typeof bwipjs !== 'undefined' ? '✅' : '❌'}`);
+                    addLog(`• simpleQRGenerator: ${typeof simpleQRGenerator !== 'undefined' ? '✅' : '❌'}`);
+                    addLog(`• Html5Qrcode: ${typeof Html5Qrcode !== 'undefined' ? '✅' : '❌'}`);
+                    addLog(`• firebase: ${typeof firebase !== 'undefined' ? '✅' : '❌'}`);
                     break;
                     
                 case 'contractors':
@@ -474,23 +484,6 @@
                     console.log('✅ ScannerManager готов');
                 }
             }, 1000);
-        });
-    </script>
-    <script>
-        // Проверка загрузки библиотек
-        window.addEventListener('load', function() {
-            console.log('📦 Проверка библиотек:');
-            console.log('- jspdf:', typeof jspdf);
-            console.log('- bwipjs:', typeof bwipjs);
-            
-            if (typeof bwipjs === 'undefined') {
-                console.error('❌ bwip-js не загружен!');
-                // Попробуйте альтернативный CDN
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/bwip-js@4.2.2/dist/bwip-js.min.js';
-                script.onload = () => console.log('✅ bwip-js загружен с jsdelivr');
-                document.head.appendChild(script);
-            }
         });
     </script>
 </body>
