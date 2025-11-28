@@ -464,26 +464,28 @@ class AppState {
     }
 
     // Отчеты
-    saveReport(report) {
+    saveReport(reportData) {
         console.log('💾 AppState: Сохранение отчета');
-
-        // Добавляем порядковый номер
-        report.sequentialNumber = this.reportCounter++;
-        report.submittedAt = new Date().toISOString();
-
-        console.log('🔢 Назначен номер:', report.sequentialNumber);
-        console.log('👥 Контрагенты в отчете:', report.contractors);
         
-        this.reports.unshift(report);
-        this.saveReports(this.reports);
+        if (!this.reports) {
+            this.reports = [];
+        }
         
-        // Очищаем текущую сессию после сохранения отчета
-        this.clearCurrentSession();
+        // Увеличиваем счетчик отчетов
+        this.reportCounter++;
         
-        // Сохраняем счетчик в localStorage
+        // Сохраняем отчет
+        this.reports.unshift(reportData); // добавляем в начало
+        
+        // Ограничиваем историю (последние 50 отчетов)
+        if (this.reports.length > 50) {
+            this.reports = this.reports.slice(0, 50);
+        }
+        
+        console.log(`✅ Отчет сохранен. Всего отчетов: ${this.reports.length}`);
+        
+        // Сохраняем в localStorage
         this.saveToStorage();
-
-        console.log('✅ Отчет сохранен');
     }
 
     getReports() {
@@ -491,7 +493,7 @@ class AppState {
     }
 
     getAllReports() {
-        return this.reports;
+        return this.reports || [];
     }
 
     saveReports(reports) {
