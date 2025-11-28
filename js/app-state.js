@@ -102,24 +102,31 @@ class AppState {
     // Метод объединения контрагентов
     mergeContractors(local, cloud) {
         console.log('🔄 Объединение данных...');
+        console.log('📱 Локальные:', local.map(c => `${c.id}:${c.name}`));
+        console.log('☁️ Облачные:', cloud.map(c => `${c.id}:${c.name}`));
         
-        // Создаем карту для быстрого поиска
-        const contractorsMap = new Map();
+        // Создаем карту для объединения
+        const mergedMap = new Map();
         
-        // Добавляем локальные контрагенты
-        local.forEach(contractor => {
-            contractorsMap.set(contractor.id, contractor);
+        // Сначала добавляем облачные данные (приоритет облака)
+        cloud.forEach(cloudContractor => {
+            mergedMap.set(cloudContractor.id, { ...cloudContractor, source: 'cloud' });
         });
         
-        // Добавляем облачные контрагенты (приоритет у более новых)
-        cloud.forEach(cloudContractor => {
-            if (!contractorsMap.has(cloudContractor.id)) {
-                contractorsMap.set(cloudContractor.id, cloudContractor);
+        // Затем добавляем локальные, только если ID нет в облаке
+        local.forEach(localContractor => {
+            if (!mergedMap.has(localContractor.id)) {
+                mergedMap.set(localContractor.id, { ...localContractor, source: 'local' });
+            } else {
+                console.log(`⚡ Конфликт ID ${localContractor.id}: Облако "${mergedMap.get(localContractor.id).name}" vs Локально "${localContractor.name}"`);
+                // Приоритет у облачных данных
             }
         });
         
-        const merged = Array.from(contractorsMap.values());
+        const merged = Array.from(mergedMap.values()).map(({ source, ...contractor }) => contractor);
+        
         console.log(`📊 Объединение завершено. Локально: ${local.length}, Облако: ${cloud.length}, Результат: ${merged.length}`);
+        console.log('✅ Результат:', merged.map(c => `${c.id}:${c.name}`));
         
         return merged.sort((a, b) => a.id - b.id);
     }
