@@ -392,15 +392,39 @@ class AppState {
         this.saveToStorage();
     }
 
-    // Работа с кодами
+    // Добавление кода
     addScannedCode(code) {
+        console.log('💾 AppState: Добавление сканированного кода:', code.substring(0, 20) + '...');
+        
+        // Проверяем, что currentSession существует
+        if (!this.currentSession) {
+            console.error('❌ currentSession не существует, создаем новую');
+            this.currentSession = {
+                id: this.generateId(),
+                contractorIds: [],
+                scannedCodes: [],
+                createdAt: new Date().toISOString()
+            };
+        }
+        
+        // Проверяем, что scannedCodes массив существует
+        if (!Array.isArray(this.currentSession.scannedCodes)) {
+            console.error('❌ scannedCodes не массив, создаем новый');
+            this.currentSession.scannedCodes = [];
+        }
+        
         const scannedCode = {
             code: code,
             timestamp: new Date().toISOString()
         };
         
+        console.log('📦 Добавляем код в scannedCodes');
         this.currentSession.scannedCodes.push(scannedCode);
+        
+        console.log('💾 Сохраняем в хранилище...');
         this.saveToStorage();
+        
+        console.log(`✅ Код добавлен. Всего кодов: ${this.currentSession.scannedCodes.length}`);
         
         return scannedCode;
     }
@@ -413,9 +437,17 @@ class AppState {
     }
 
     hasCodeBeenScanned(code) {
-        return this.currentSession.scannedCodes.some(
+        if (!this.currentSession || !Array.isArray(this.currentSession.scannedCodes)) {
+            console.log('ℹ️ Нет сессии или scannedCodes, считаем код новым');
+            return false;
+        }
+        
+        const isDuplicate = this.currentSession.scannedCodes.some(
             scannedCode => scannedCode.code === code
         );
+        
+        console.log(`🔍 Проверка дубликата "${code.substring(0, 20)}...": ${isDuplicate ? 'ДУБЛИКАТ' : 'НОВЫЙ'}`);
+        return isDuplicate;
     }
 
     // Отчеты
@@ -474,21 +506,31 @@ class AppState {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
     }
 
-    // Сохранение/загрузка
+    // Сохранение
     saveToStorage() {
-        localStorage.setItem('honest_sign_current_session', JSON.stringify(this.currentSession));
-        localStorage.setItem('honest_sign_sent_sessions', JSON.stringify(this.sentSessions));
-        localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
-        localStorage.setItem('honest_sign_report_counter', this.reportCounter.toString());
+        console.log('💾 AppState: Сохранение в localStorage...');
         
-        // Сохраняем выбранных контрагентов отдельно
-        const selectedContractorsData = {
-            contractorIds: this.currentSession.contractorIds || [],
-            timestamp: new Date().toISOString()
-        };
-        localStorage.setItem('honest_sign_selected_contractors', JSON.stringify(selectedContractorsData));
+        try {
+            localStorage.setItem('honest_sign_current_session', JSON.stringify(this.currentSession));
+            localStorage.setItem('honest_sign_sent_sessions', JSON.stringify(this.sentSessions));
+            localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
+            localStorage.setItem('honest_sign_report_counter', this.reportCounter.toString());
+            
+            // Сохраняем выбранных контрагентов отдельно
+            const selectedContractorsData = {
+                contractorIds: this.currentSession.contractorIds || [],
+                timestamp: new Date().toISOString()
+            };
+            localStorage.setItem('honest_sign_selected_contractors', JSON.stringify(selectedContractorsData));
+            
+            console.log('✅ Данные сохранены в localStorage');
+            
+        } catch (error) {
+            console.error('❌ Ошибка сохранения в localStorage:', error);
+        }
     }
 
+    //Загрузка
     loadFromStorage() {
         try {
             const savedSession = localStorage.getItem('honest_sign_current_session');
