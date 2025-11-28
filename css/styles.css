@@ -1290,3 +1290,31 @@ h1 {
     0% { background-color: rgba(0, 255, 0, 0.3); }
     100% { background-color: transparent; }
 }
+
+.btn[title]:hover::after {
+    content: attr(title);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    margin-bottom: 5px;
+}
+
+.btn[title] {
+    position: relative;
+}
+
+/* Стиль для неактивной кнопки отчета */
+#generateReport:disabled {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
