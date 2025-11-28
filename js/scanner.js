@@ -565,10 +565,11 @@ class ScannerManager {
     }
 
     onScanSuccess(decodedText) {
-        console.log('🔍 Обработка сканированного DataMatrix кода');
+        console.log('🔍 Обработка сканированного DataMatrix кода:', decodedText);
         
         // Сначала проверяем, это ли данные синхронизации
         if (this.handleSyncQRCode(decodedText)) {
+            console.log('✅ Обработано как данные синхронизации');
             return;
         }
         
@@ -583,26 +584,44 @@ class ScannerManager {
             return;
         }
     
-        // Проверка дубликатов
-        if (window.appState && window.appState.hasCodeBeenScanned(decodedText)) {
-            showWarning('⚠️ Этот код уже отсканирован');
-            return;
+        console.log('🔍 Проверка дубликатов...');
+        
+        // Проверка дубликатов через AppState
+        if (window.appState && window.appState.hasCodeBeenScanned) {
+            const isDuplicate = window.appState.hasCodeBeenScanned(decodedText);
+            console.log(`🔍 Проверка дубликата: ${decodedText.substring(0, 20)}... - ${isDuplicate ? 'ДУБЛИКАТ' : 'НОВЫЙ'}`);
+            
+            if (isDuplicate) {
+                showWarning('⚠️ Этот код уже отсканирован');
+                return;
+            }
+        } else {
+            console.error('❌ AppState не доступен для проверки дубликатов');
         }
     
+        console.log('💾 Создание объекта scannedCode...');
         const scannedCode = {
             code: decodedText,
             timestamp: new Date().toISOString(),
             contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
         };
         
+        console.log('📦 Добавление кода в AppState...');
         if (window.appState) {
             window.appState.addScannedCode(decodedText);
+            console.log('✅ Код добавлен в AppState');
+        } else {
+            console.error('❌ AppState не доступен');
         }
         
+        console.log('📝 Добавление кода в UI список...');
         this.addCodeToList(scannedCode);
+        
+        console.log('🔄 Обновление UI...');
         this.updateUI();
         
         showSuccess(`✅ DataMatrix код добавлен`, 2000);
+        console.log('✅ Все операции завершены успешно');
         
         // Виброотклик на мобильных
         if (navigator.vibrate) {
@@ -629,13 +648,25 @@ class ScannerManager {
     }
 
     addCodeToList(scannedCode) {
+        console.log('📝 addCodeToList вызван с:', scannedCode);
+        
         const codesList = document.getElementById('codesList');
+        if (!codesList) {
+            console.error('❌ codesList элемент не найден');
+            return;
+        }
+        
+        console.log('🔍 Поиск empty-state...');
         const emptyState = codesList.querySelector('.empty-state');
         
         if (emptyState) {
+            console.log('✅ Удаляем empty-state');
             emptyState.remove();
+        } else {
+            console.log('ℹ️ empty-state не найден');
         }
         
+        console.log('🧩 Создание code-item...');
         const codeItem = document.createElement('div');
         codeItem.className = 'code-item';
         codeItem.innerHTML = `
@@ -650,7 +681,9 @@ class ScannerManager {
             </div>
         `;
         
+        console.log('📤 Добавление code-item в DOM...');
         codesList.appendChild(codeItem);
+        console.log('✅ code-item добавлен в DOM');
     }
 
     formatCode(code) {
@@ -772,19 +805,37 @@ class ScannerManager {
 
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     updateUI() {
-        if (!appState) return;
+        console.log('🔄 updateUI вызван');
         
-        const session = appState.getCurrentSession();
+        if (!window.appState) {
+            console.error('❌ AppState не доступен в updateUI');
+            return;
+        }
+        
+        const session = window.appState.getCurrentSession();
         const codesCount = session.scannedCodes.length;
+        
+        console.log(`📊 Кодов в сессии: ${codesCount}`);
         
         const totalCodes = document.getElementById('totalCodes');
         const codesCountElement = document.getElementById('codesCount');
         
-        if (totalCodes) totalCodes.textContent = codesCount;
-        if (codesCountElement) codesCountElement.textContent = codesCount;
+        if (totalCodes) {
+            totalCodes.textContent = codesCount;
+            console.log('✅ totalCodes обновлен:', codesCount);
+        } else {
+            console.error('❌ totalCodes элемент не найден');
+        }
+        
+        if (codesCountElement) {
+            codesCountElement.textContent = codesCount;
+            console.log('✅ codesCountElement обновлен:', codesCount);
+        } else {
+            console.error('❌ codesCountElement элемент не найден');
+        }
         
         this.updateButtonStates();
-        this.updateCodesList();
+        console.log('✅ updateUI завершен');
     }
 
     updateButtonStates() {
