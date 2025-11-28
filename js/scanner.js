@@ -717,6 +717,16 @@ class ScannerManager {
     async generateReport() {
         console.log('📄 Формирование отчета...');
         
+        if (typeof jspdf === 'undefined') {
+            showError('❌ Библиотека PDF не загружена. Перезагрузите страницу.');
+            return;
+        }
+        
+        if (!window.appState) {
+            showError('❌ AppState не доступен');
+            return;
+        }
+
         if (!window.appState) {
             showError('❌ AppState не доступен');
             return;
@@ -725,6 +735,8 @@ class ScannerManager {
         const session = window.appState.getCurrentSession();
         const codesCount = session.scannedCodes.length;
         const contractorsCount = this.selectedContractors.length;
+        
+        console.log(`🔍 Проверка: коды=${codesCount}, контрагенты=${contractorsCount}`);
         
         // ПРОВЕРКА 1: Есть ли коды
         if (codesCount === 0) {
@@ -744,9 +756,14 @@ class ScannerManager {
             return;
         }
         
-        showInfo('📄 Формирование PDF отчета...', 3000);
+        showInfo('📄 Формирование PDF отчета...', 5000);
         
         try {
+            // Проверяем доступность PDF генератора
+            if (typeof pdfGenerator === 'undefined') {
+                throw new Error('PDF Generator не загружен');
+            }
+            
             // Создаем данные для отчета
             const reportData = {
                 id: Date.now().toString(),
@@ -761,10 +778,14 @@ class ScannerManager {
             console.log('📊 Данные для отчета:', reportData);
             
             // Генерируем PDF
+            console.log('🔄 Начинаем генерацию PDF...');
             const pdfBytes = await pdfGenerator.generateReport(reportData);
+            console.log('✅ PDF сгенерирован успешно');
             
             // Скачиваем PDF
             const filename = `scan_report_${new Date().toISOString().split('T')[0]}_${reportData.sequentialNumber}.pdf`;
+            console.log('💾 Скачиваем файл:', filename);
+            
             const success = pdfGenerator.downloadPDF(pdfBytes, filename);
             
             if (success) {
@@ -778,8 +799,9 @@ class ScannerManager {
                 this.loadReportsList();
                 
                 showSuccess(`✅ Отчет создан! Файл: ${filename}`, 5000);
+                console.log('🎉 Отчет успешно создан и скачан');
             } else {
-                showError('❌ Ошибка при скачивании отчета');
+                throw new Error('Не удалось скачать PDF файл');
             }
             
         } catch (error) {
@@ -1252,6 +1274,14 @@ class ScannerManager {
     // ОБРАБОТЧИКИ СОБЫТИЙ
     setupEventListeners() {
         console.log('🔧 Настройка обработчиков событий');
+
+        document.addEventListener('click', (e) => {
+            if (e.target.id === 'startCamera' || e.target.closest('#startCamera')) {
+                console.log('📷 Кнопка камеры нажата');
+                console.log('- Выбрано контрагентов:', this.selectedContractors.length);
+                console.log('- Камера доступна:', navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia);
+            }
+        });
         
         // Основные кнопки
         this.setupButton('startCamera', 'startCamera');
@@ -1385,6 +1415,21 @@ function checkReportButton() {
     console.log('- Кнопка disabled:', btn.disabled);
     console.log('- Можно формировать отчет:', codesCount >= contractorsCount && codesCount > 0 && contractorsCount > 0);
 }
+
+function checkPDFEnvironment() {
+    console.log('🔍 Проверка окружения PDF:');
+    console.log('- jspdf:', typeof jspdf);
+    console.log('- bwipjs:', typeof bwipjs);
+    console.log('- pdfGenerator:', typeof pdfGenerator);
+    console.log('- AppState:', typeof appState);
+    
+    if (window.appState) {
+        const session = window.appState.getCurrentSession();
+        console.log('- Коды в сессии:', session.scannedCodes.length);
+        console.log('- Контрагенты выбрано:', window.scannerManager?.selectedContractors.length);
+    }
+}
+
 
 // Сделать функцию глобально доступной
 window.forceDataAlignment = forceDataAlignment;
