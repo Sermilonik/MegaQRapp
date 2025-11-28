@@ -7,19 +7,48 @@ class PDFGenerator {
     async generateReport(reportData) {
         console.log('📄 Generating PDF report:', reportData);
         
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        // Основная информация
-        this.addHeader(doc, reportData);
-        this.addReportInfo(doc, reportData);
-        this.addContractorsInfo(doc, reportData);
-        this.addCodesTable(doc, reportData);
-        
-        // Генерируем DataMatrix коды на отдельной странице
-        await this.addDataMatrixCodes(doc, reportData);
-        
-        return doc.output('arraybuffer');
+        try {
+            // Проверяем доступность библиотек
+            if (typeof jspdf === 'undefined') {
+                throw new Error('jspdf библиотека не загружена');
+            }
+            
+            if (typeof bwipjs === 'undefined') {
+                console.warn('⚠️ bwip-js не доступен, DataMatrix коды не будут сгенерированы');
+            }
+            
+            const { jsPDF } = jspdf;
+            const doc = new jsPDF();
+            
+            // Основная информация
+            this.addHeader(doc, reportData);
+            this.addReportInfo(doc, reportData);
+            this.addContractorsInfo(doc, reportData);
+            this.addCodesTable(doc, reportData);
+            
+            // Пробуем добавить DataMatrix коды если библиотека доступна
+            if (typeof bwipjs !== 'undefined') {
+                await this.addDataMatrixCodes(doc, reportData);
+            } else {
+                this.addNoDataMatrixMessage(doc);
+            }
+            
+            return doc.output('arraybuffer');
+            
+        } catch (error) {
+            console.error('❌ PDF generation error:', error);
+            throw error;
+        }
+    }
+    
+    // ДОБАВЬТЕ этот метод в pdf-generator.js
+    addNoDataMatrixMessage(doc) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.setTextColor(100, 100, 100);
+        doc.text('DATA MATRIX КОДЫ НЕДОСТУПНЫ', 105, 100, { align: 'center' });
+        doc.text('Библиотека bwip-js не загружена', 105, 110, { align: 'center' });
+        doc.text('Коды доступны в текстовом виде на предыдущей странице', 105, 120, { align: 'center' });
     }
 
     addHeader(doc, reportData) {
@@ -107,9 +136,10 @@ class PDFGenerator {
     }
 
     addCodesTable(doc, reportData) {
+        let yPosition = 135;
+
         doc.setFont(undefined, 'bold');
         doc.text('Список отсканированных кодов:', 20, 120);
-        yPosition = 135;
         
         // Заголовок таблицы
         doc.setFillColor(240, 240, 240);
@@ -208,38 +238,31 @@ class PDFGenerator {
         return new Promise((resolve) => {
             try {
                 if (typeof bwipjs === 'undefined') {
-                    console.warn('⚠️ bwip-js not available');
+                    console.warn('⚠️ bwip-js not available for DataMatrix');
                     resolve(null);
                     return;
                 }
                 
                 const canvas = document.createElement('canvas');
+                canvas.width = 100;
+                canvas.height = 100;
                 
+                // Упрощенная генерация DataMatrix
                 bwipjs.toCanvas(canvas, {
                     bcid: 'datamatrix',
                     text: data,
                     scale: 3,
-                    height: 10,
-                    width: 10,
                     includetext: false,
-                    textxalign: 'center'
                 });
                 
+                console.log('✅ DataMatrix generated successfully');
                 resolve(canvas.toDataURL('image/png'));
                 
             } catch (error) {
-                console.error('Data Matrix generation error:', error);
+                console.error('❌ Data Matrix generation failed:', error);
                 resolve(null);
             }
         });
-    }
-
-    formatCodeForDisplay(code) {
-        if (!code) return 'N/A';
-        if (code.length > 30) {
-            return code.substring(0, 15) + '...' + code.substring(code.length - 10);
-        }
-        return code;
     }
 
     formatCodeShort(code) {
