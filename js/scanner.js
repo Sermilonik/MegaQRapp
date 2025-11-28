@@ -651,9 +651,21 @@ class ScannerManager {
     }
 
     formatCode(code) {
-        return code.length > 25 
-            ? code.substring(0, 15) + '...' + code.substring(code.length - 10)
-            : code;
+        if (!code) return 'N/A';
+        
+        try {
+            // Обработка специальных символов
+            let displayCode = code;
+            if (code.includes('\u001d')) {
+                displayCode = code.replace(/\u001d/g, 'GS');
+            }
+            
+            return displayCode.length > 25 
+                ? displayCode.substring(0, 15) + '...' + displayCode.substring(displayCode.length - 10)
+                : displayCode;
+        } catch (error) {
+            return 'INVALID_CODE';
+        }
     }
 
     removeCode(code) {
