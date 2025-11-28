@@ -639,7 +639,7 @@ class ScannerManager {
                 <div class="code-time">${new Date(scannedCode.timestamp).toLocaleTimeString()}</div>
             </div>
             <div class="code-actions">
-                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeCode('${scannedCode.code}')">
+                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeCode('${scannedCode.code.replace(/'/g, "\\'")}')">
                     ✕ Удалить
                 </button>
             </div>
@@ -657,10 +657,21 @@ class ScannerManager {
     }
 
     removeCode(code) {
-        if (appState) {
-            appState.removeScannedCode(code);
+        console.log('🗑️ Удаление кода:', code.substring(0, 20) + '...');
+        
+        if (window.appState) {
+            window.appState.removeScannedCode(code);
+            console.log('✅ Код удален из AppState');
+        } else {
+            console.error('❌ AppState не доступен');
         }
+        
+        // Перезагружаем список кодов
+        this.updateCodesList();
+        
+        // Обновляем счетчики
         this.updateUI();
+        
         showWarning('Код удален', 2000);
     }
 
@@ -723,13 +734,25 @@ class ScannerManager {
     }
 
     clearSession() {
+        console.log('🗑️ Очистка сессии...');
+        
+        // Останавливаем камеру
         this.stopCamera();
-        if (appState) {
-            appState.clearCurrentSession();
+        
+        // Очищаем в AppState
+        if (window.appState) {
+            window.appState.clearCurrentSession();
+            console.log('✅ Сессия очищена в AppState');
         }
+        
+        // Очищаем выбранных контрагентов
         this.selectedContractors = [];
         this.updateSelectedContractorsUI();
+        
+        // Обновляем UI
         this.updateUI();
+        this.updateCodesList(); // Добавьте этот вызов!
+        
         showWarning('🗑️ Сессия очищена', 3000);
     }
 
@@ -814,19 +837,55 @@ class ScannerManager {
     }
 
     updateCodesList() {
-        if (!appState) return;
+        console.log('🔄 Обновление списка кодов...');
+        
+        if (!window.appState) {
+            console.error('❌ AppState не доступен');
+            return;
+        }
         
         const codesList = document.getElementById('codesList');
-        const codes = appState.getCurrentSession().scannedCodes;
+        if (!codesList) {
+            console.error('❌ codesList элемент не найден');
+            return;
+        }
+        
+        const codes = window.appState.getCurrentSession().scannedCodes;
+        console.log(`📊 Отображаем ${codes.length} кодов`);
+        
+        // Очищаем список
+        codesList.innerHTML = '';
         
         if (codes.length === 0) {
+            console.log('📭 Нет кодов, показываем empty-state');
             codesList.innerHTML = `
                 <div class="empty-state">
                     <span class="empty-icon">📦</span>
                     <p>Нет отсканированных кодов</p>
+                    <small>Начните сканирование или используйте симулятор</small>
                 </div>
             `;
+        } else {
+            console.log('📝 Добавляем коды в список');
+            codes.forEach(scannedCode => {
+                const codeItem = document.createElement('div');
+                codeItem.className = 'code-item';
+                codeItem.innerHTML = `
+                    <div class="code-info">
+                        <div class="code-value">${this.formatCode(scannedCode.code)}</div>
+                        <div class="code-time">${new Date(scannedCode.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                    <div class="code-actions">
+                        <button class="btn btn-sm btn-danger" onclick="scannerManager.removeCode('${scannedCode.code}')">
+                            ✕ Удалить
+                        </button>
+                    </div>
+                `;
+                codesList.appendChild(codeItem);
+            });
         }
+        
+        console.log('✅ Список кодов обновлен');
     }
 
     checkExistingSession() {
