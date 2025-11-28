@@ -4,6 +4,19 @@ class PDFGenerator {
         console.log('📄 PDF Generator initialized');
     }
 
+        formatCodeForDisplay(code) {
+            if (!code) return 'N/A';
+            
+            // Убираем специальные символы для лучшего отображения
+            const cleanCode = code.replace(/[^\x20-\x7E]/g, '');
+            
+            if (cleanCode.length > 30) {
+                return cleanCode.substring(0, 15) + '...' + cleanCode.substring(cleanCode.length - 10);
+            }
+            
+            return cleanCode;
+        }
+
     async generateReport(reportData) {
         console.log('📄 Generating PDF report:', reportData);
         
@@ -267,10 +280,20 @@ class PDFGenerator {
 
     formatCodeShort(code) {
         if (!code) return 'N/A';
-        if (code.length > 15) {
-            return code.substring(0, 8) + '...';
+        
+        try {
+            let cleanCode = code;
+            if (code.includes('\u001d')) {
+                cleanCode = code.replace(/\u001d/g, '');
+            }
+            
+            if (cleanCode.length > 15) {
+                return cleanCode.substring(0, 8) + '...';
+            }
+            return cleanCode;
+        } catch (error) {
+            return 'ERR';
         }
-        return code;
     }
 
     downloadPDF(pdfBytes, filename) {
