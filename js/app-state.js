@@ -430,10 +430,23 @@ class AppState {
     }
 
     removeScannedCode(code) {
+        console.log('🗑️ AppState: Удаление кода:', code.substring(0, 20) + '...');
+        
+        if (!this.currentSession || !Array.isArray(this.currentSession.scannedCodes)) {
+            console.error('❌ Нет сессии или scannedCodes для удаления');
+            return;
+        }
+        
+        const initialLength = this.currentSession.scannedCodes.length;
         this.currentSession.scannedCodes = this.currentSession.scannedCodes.filter(
             scannedCode => scannedCode.code !== code
         );
+        
+        const finalLength = this.currentSession.scannedCodes.length;
+        console.log(`📊 Удалено кодов: ${initialLength} → ${finalLength}`);
+        
         this.saveToStorage();
+        console.log('✅ Код удален и сохранен');
     }
 
     hasCodeBeenScanned(code) {
