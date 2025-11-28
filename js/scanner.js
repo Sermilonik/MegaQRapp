@@ -502,8 +502,8 @@ class ScannerManager {
                     this.onScanSuccess(decodedText);
                 },
                 (error) => {
-                    // Игнорируем ВСЕ ошибки сканирования - это нормально
-                    // Библиотека сама обработает форматы
+                    // Оставляем только базовое логирование
+                    console.log('📷 Сканирование:', error);
                 }
             );
     
@@ -565,11 +565,10 @@ class ScannerManager {
     }
 
     onScanSuccess(decodedText) {
-        console.log('🔍 Обработка сканированного DataMatrix кода:', decodedText);
+        console.log('✅ Код распознан:', decodedText);
         
         // Сначала проверяем, это ли данные синхронизации
         if (this.handleSyncQRCode(decodedText)) {
-            console.log('✅ Обработано как данные синхронизации');
             return;
         }
         
@@ -578,73 +577,38 @@ class ScannerManager {
             return;
         }
     
-        // Базовая проверка формата
-        if (!this.isValidCodeFormat(decodedText)) {
-            showError('❌ Неподдерживаемый формат кода');
+        // Базовая проверка
+        if (!decodedText || decodedText.trim().length === 0) {
+            showError('❌ Пустой код');
             return;
         }
     
-        console.log('🔍 Проверка дубликатов...');
-        
-        // Проверка дубликатов через AppState
-        if (window.appState && window.appState.hasCodeBeenScanned) {
-            const isDuplicate = window.appState.hasCodeBeenScanned(decodedText);
-            console.log(`🔍 Проверка дубликата: ${decodedText.substring(0, 20)}... - ${isDuplicate ? 'ДУБЛИКАТ' : 'НОВЫЙ'}`);
-            
-            if (isDuplicate) {
-                showWarning('⚠️ Этот код уже отсканирован');
-                return;
-            }
-        } else {
-            console.error('❌ AppState не доступен для проверки дубликатов');
+        // Проверка дубликатов
+        if (window.appState && window.appState.hasCodeBeenScanned(decodedText)) {
+            showWarning('⚠️ Этот код уже отсканирован');
+            return;
         }
     
-        console.log('💾 Создание объекта scannedCode...');
+        // Добавляем код
         const scannedCode = {
             code: decodedText,
             timestamp: new Date().toISOString(),
             contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
         };
         
-        console.log('📦 Добавление кода в AppState...');
         if (window.appState) {
             window.appState.addScannedCode(decodedText);
-            console.log('✅ Код добавлен в AppState');
-        } else {
-            console.error('❌ AppState не доступен');
         }
         
-        console.log('📝 Добавление кода в UI список...');
         this.addCodeToList(scannedCode);
-        
-        console.log('🔄 Обновление UI...');
         this.updateUI();
         
-        showSuccess(`✅ DataMatrix код добавлен`, 2000);
-        console.log('✅ Все операции завершены успешно');
+        showSuccess(`✅ Код добавлен`, 2000);
         
         // Виброотклик на мобильных
         if (navigator.vibrate) {
             navigator.vibrate(200);
         }
-    }
-
-    // метод проверки форматов
-    isValidCodeFormat(code) {
-        // ПРИНИМАЕМ ЛЮБЫЕ КОДЫ которые сканирует библиотека
-        if (!code || code.trim().length === 0) {
-            console.log('❌ Пустой код');
-            return false;
-        }
-        
-        // DataMatrix коды обычно от 10 символов
-        if (code.length < 10) {
-            console.log('❌ Слишком короткий код:', code);
-            return false;
-        }
-        
-        console.log('✅ Принят код формата DataMatrix:', code.substring(0, 20) + '...');
-        return true;
     }
 
     addCodeToList(scannedCode) {
