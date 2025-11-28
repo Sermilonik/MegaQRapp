@@ -732,16 +732,6 @@ class ScannerManager {
     async generateReport() {
         console.log('📄 Формирование отчета...');
         
-        if (typeof jspdf === 'undefined') {
-            showError('❌ Библиотека PDF не загружена. Перезагрузите страницу.');
-            return;
-        }
-        
-        if (!window.appState) {
-            showError('❌ AppState не доступен');
-            return;
-        }
-
         if (!window.appState) {
             showError('❌ AppState не доступен');
             return;
@@ -753,19 +743,17 @@ class ScannerManager {
         
         console.log(`🔍 Проверка: коды=${codesCount}, контрагенты=${contractorsCount}`);
         
-        // ПРОВЕРКА 1: Есть ли коды
+        // Проверки
         if (codesCount === 0) {
             showError('❌ Нет отсканированных кодов для отчета');
             return;
         }
         
-        // ПРОВЕРКА 2: Выбраны ли контрагенты
         if (contractorsCount === 0) {
             showError('❌ Не выбраны контрагенты');
             return;
         }
         
-        // ПРОВЕРКА 3: Достаточно ли кодов для контрагентов
         if (codesCount < contractorsCount) {
             showError(`❌ Недостаточно кодов! Отсканировано: ${codesCount}, нужно минимум: ${contractorsCount}`);
             return;
@@ -774,8 +762,8 @@ class ScannerManager {
         showInfo('📄 Формирование PDF отчета...', 5000);
         
         try {
-            // Проверяем доступность PDF генератора
-            if (typeof pdfGenerator === 'undefined') {
+            // ИСПОЛЬЗУЕМ PDFMAKE ВМЕСТО PDFGENERATOR
+            if (typeof pdfMakeGenerator === 'undefined') {
                 throw new Error('PDF Generator не загружен');
             }
             
@@ -792,16 +780,16 @@ class ScannerManager {
             
             console.log('📊 Данные для отчета:', reportData);
             
-            // Генерируем PDF
-            console.log('🔄 Начинаем генерацию PDF...');
-            const pdfBytes = await pdfGenerator.generateReport(reportData);
+            // Генерируем PDF с помощью pdfmake
+            console.log('🔄 Начинаем генерацию PDF с pdfmake...');
+            const pdfBytes = await pdfMakeGenerator.generateReport(reportData);
             console.log('✅ PDF сгенерирован успешно');
             
             // Скачиваем PDF
             const filename = `scan_report_${new Date().toISOString().split('T')[0]}_${reportData.sequentialNumber}.pdf`;
             console.log('💾 Скачиваем файл:', filename);
             
-            const success = pdfGenerator.downloadPDF(pdfBytes, filename);
+            const success = pdfMakeGenerator.downloadPDF(pdfBytes, filename);
             
             if (success) {
                 // Сохраняем отчет в историю
