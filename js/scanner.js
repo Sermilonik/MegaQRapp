@@ -47,6 +47,9 @@ class ScannerManager {
         setTimeout(() => {
             this.updateSyncUI();
         }, 3000);
+
+        //загружаем отчеты
+        this.loadReportsList();
         
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
@@ -846,37 +849,93 @@ class ScannerManager {
     }
 
     loadReportsList() {
-        if (!appState) return;
+        console.log('📋 Загрузка списка отчетов...');
         
-        const reports = appState.getAllReports();
+        if (!window.appState) {
+            console.error('❌ AppState не доступен для загрузки отчетов');
+            return;
+        }
+        
+        const reports = window.appState.getAllReports();
         const container = document.getElementById('reportsList');
         
-        if (!container) return;
-
+        if (!container) {
+            console.error('❌ Контейнер отчетов не найден');
+            return;
+        }
+    
+        console.log(`📊 Загружено отчетов: ${reports.length}`);
+        
         if (reports.length === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <span class="empty-icon">📄</span>
-                    <p>Нет отчетов</p>
+                    <p>Нет отправленных отчетов</p>
+                    <small>Созданные отчеты появятся здесь</small>
                 </div>
             `;
             return;
         }
-
-        container.innerHTML = reports.map(report => `
-            <div class="report-item">
+    
+        container.innerHTML = reports.map((report, index) => `
+            <div class="report-item ${report.status || 'processed'}">
                 <div class="report-info">
                     <div class="report-header">
-                        <strong>${report.contractorName}</strong>
-                        <span class="report-status ${report.status}">${report.status}</span>
+                        <strong>${report.contractorName || 'Контрагенты не указаны'}</strong>
+                        <span class="report-status ${report.status || 'processed'}">
+                            ${report.status || 'обработан'}
+                        </span>
                     </div>
                     <div class="report-details">
-                        <span>Кодов: ${report.codes.length}</span>
-                        <span>${new Date(report.createdAt).toLocaleString()}</span>
+                        <span>Отчет #${report.sequentialNumber || (index + 1)}</span>
+                        <span>Кодов: ${report.codes ? report.codes.length : 0}</span>
+                        <span>${new Date(report.createdAt).toLocaleString('ru-RU')}</span>
                     </div>
+                </div>
+                <div class="report-actions">
+                    <button class="btn btn-sm btn-outline" onclick="scannerManager.downloadReport(${index})">
+                        📥 Скачать
+                    </button>
                 </div>
             </div>
         `).join('');
+        
+        console.log('✅ Список отчетов обновлен');
+    }
+
+    async downloadReport(reportIndex) {
+        console.log(`📥 Скачивание отчета #${reportIndex}`);
+        
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        const reports = window.appState.getAllReports();
+        if (!reports[reportIndex]) {
+            showError('Отчет не найден');
+            return;
+        }
+        
+        const report = reports[reportIndex];
+        
+        try {
+            showInfo('Формирование PDF...', 3000);
+            
+            const pdfBytes = await pdfGenerator.generateReport(report);
+            const filename = `scan_report_${new Date(report.createdAt).toISOString().split('T')[0]}_${report.sequentialNumber}.pdf`;
+            
+            const success = pdfGenerator.downloadPDF(pdfBytes, filename);
+            
+            if (success) {
+                showSuccess(`Отчет скачан: ${filename}`, 3000);
+            } else {
+                showError('Ошибка скачивания');
+            }
+        } catch (error) {
+            console.error('Ошибка скачивания отчета:', error);
+            showError('Ошибка формирования отчета: ' + error.message);
+        }
     }
 
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
