@@ -865,7 +865,23 @@ class ScannerManager {
             return;
         }
     
-        container.innerHTML = reports.map((report, index) => `
+        // Добавляем заголовок с количеством отчетов и кнопкой очистки
+        container.innerHTML = `
+            <div class="reports-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
+                <div>
+                    <strong>Всего отчетов: ${reports.length}</strong>
+                </div>
+                <button class="btn btn-sm btn-danger" onclick="scannerManager.clearReportsHistory()">
+                    🗑️ Очистить историю
+                </button>
+            </div>
+        `;
+        
+        // Добавляем список отчетов
+        const reportsContainer = document.createElement('div');
+        reportsContainer.className = 'reports-container';
+        
+        reportsContainer.innerHTML = reports.map((report, index) => `
             <div class="report-item ${report.status || 'processed'}">
                 <div class="report-info">
                     <div class="report-header">
@@ -887,6 +903,8 @@ class ScannerManager {
                 </div>
             </div>
         `).join('');
+        
+        container.appendChild(reportsContainer);
         
         console.log('✅ Список отчетов обновлен');
     }
@@ -910,10 +928,15 @@ class ScannerManager {
         try {
             showInfo('Формирование PDF...', 3000);
             
-            const pdfBytes = await pdfGenerator.generateReport(report);
+            // ИСПОЛЬЗУЕМ PDFMAKE ВМЕСТО PDFGENERATOR
+            if (typeof pdfMakeGenerator === 'undefined') {
+                throw new Error('PDF Generator не загружен');
+            }
+            
+            const pdfBytes = await pdfMakeGenerator.generateReport(report);
             const filename = `scan_report_${new Date(report.createdAt).toISOString().split('T')[0]}_${report.sequentialNumber}.pdf`;
             
-            const success = pdfGenerator.downloadPDF(pdfBytes, filename);
+            const success = pdfMakeGenerator.downloadPDF(pdfBytes, filename);
             
             if (success) {
                 showSuccess(`Отчет скачан: ${filename}`, 3000);
@@ -925,7 +948,6 @@ class ScannerManager {
             showError('Ошибка формирования отчета: ' + error.message);
         }
     }
-
     // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
     updateUI() {
         console.log('🔄 updateUI вызван');
@@ -1166,6 +1188,25 @@ class ScannerManager {
         } catch (error) {
             console.error('❌ Ошибка синхронизации:', error);
             showError('Ошибка синхронизации: ' + error.message);
+        }
+    }
+
+    clearReportsHistory() {
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        if (confirm('Вы уверены, что хотите очистить всю историю отчетов? Это действие нельзя отменить.')) {
+            console.log('🗑️ Очистка истории отчетов...');
+            
+            // Очищаем историю в AppState
+            window.appState.clearReports();
+            
+            // Обновляем список отчетов
+            this.loadReportsList();
+            
+            showSuccess('История отчетов очищена', 3000);
         }
     }
 
