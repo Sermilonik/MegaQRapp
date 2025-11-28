@@ -501,6 +501,14 @@ class AppState {
         localStorage.setItem('honest_sign_reports', JSON.stringify(reports));
     }
 
+    clearReports() {
+        console.log('🗑️ AppState: Очистка истории отчетов');
+        this.reports = [];
+        this.reportCounter = 1;
+        this.saveToStorage();
+        console.log('✅ История отчетов очищена');
+    }
+
     // Отправка сессий
     sendCurrentSession() {
         if (this.currentSession.scannedCodes.length === 0) {
