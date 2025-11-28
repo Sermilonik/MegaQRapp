@@ -466,54 +466,57 @@ class ScannerManager {
             console.log('⚠️ Камера уже запущена');
             return;
         }
-
+    
         if (this.selectedContractors.length === 0) {
             showError('❌ Сначала выберите контрагентов');
             return;
         }
-
+    
         try {
-            // Останавливаем предыдущую камеру
             await this.stopCamera();
-
-            // Проверяем библиотеку
+    
             if (typeof Html5Qrcode === 'undefined') {
                 await this.loadHtml5QrCode();
             }
-
+    
             const container = document.getElementById('reader');
             if (!container) throw new Error('Контейнер не найден');
-
-            // Очищаем контейнер
+    
             container.innerHTML = '';
             
             this.scanner = new Html5Qrcode("reader");
             
             const config = {
-                fps: 10,
+                fps: 5, // Меньше FPS = меньше ошибок
                 qrbox: { width: 250, height: 250 },
                 aspectRatio: 1.0
             };
-
+    
+            // Улучшенный обработчик ошибок
+            const verbose = false; // Убираем лишние логи
+            
             await this.scanner.start(
                 { facingMode: "environment" },
                 config,
                 (decodedText) => {
-                    console.log('✅ QR-код распознан:', decodedText);
+                    console.log('✅ Код распознан:', decodedText);
                     this.onScanSuccess(decodedText);
                 },
                 (error) => {
-                    // Игнорируем ошибки сканирования
-                    if (!error.includes('NotFoundException')) {
+                    // Фильтруем только важные ошибки
+                    if (!error.includes('NotFoundException') && 
+                        !error.includes('No barcode') &&
+                        !error.includes('No MultiFormat')) {
                         console.log('📷 Ошибка сканирования:', error);
                     }
-                }
+                },
+                verbose // Отключаем подробное логирование
             );
-
+    
             this.isScanning = true;
             this.updateCameraUI();
             showSuccess('📷 Камера запущена!', 3000);
-
+    
         } catch (error) {
             console.error('❌ Ошибка запуска камеры:', error);
             showError(`Ошибка камеры: ${error.message}`);
@@ -568,36 +571,79 @@ class ScannerManager {
     }
 
     onScanSuccess(decodedText) {
+        console.log('🔍 Обработка сканированного кода:', decodedText);
+        
+        if (!this.isValidCodeFormat(decodedText)) {
+            showError('❌ Неподдерживаемый формат кода');
+            return;
+        }
+        
         // Сначала проверяем, это ли данные синхронизации
         if (this.handleSyncQRCode(decodedText)) {
             return;
         }
         
-        // Обычное сканирование кодов...
         if (this.selectedContractors.length === 0) {
             showError('❌ Сначала выберите контрагентов');
             return;
         }
-
-        if (appState && appState.hasCodeBeenScanned(decodedText)) {
-            showWarning('⚠️ Этот код уже отсканирован');
-            return;
+    
+        // Детальная проверка дубликатов
+        if (window.appState && window.appState.hasCodeBeenScanned) {
+            const isDuplicate = window.appState.hasCodeBeenScanned(decodedText);
+            console.log(`🔍 Проверка дубликата: ${decodedText} - ${isDuplicate ? 'ДУБЛИКАТ' : 'НОВЫЙ'}`);
+            
+            if (isDuplicate) {
+                showWarning('⚠️ Этот код уже отсканирован');
+                return;
+            }
         }
-
+    
         const scannedCode = {
             code: decodedText,
             timestamp: new Date().toISOString(),
             contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
         };
         
-        if (appState) {
-            appState.addScannedCode(decodedText);
+        console.log('💾 Добавление кода в AppState:', scannedCode);
+        
+        if (window.appState) {
+            window.appState.addScannedCode(decodedText);
         }
         
         this.addCodeToList(scannedCode);
         this.updateUI();
         
-        showSuccess(`✅ Код добавлен`, 2000);
+        showSuccess(`✅ Код добавлен: ${this.formatCode(decodedText)}`, 2000);
+        
+        // Виброотклик на мобильных (если поддерживается)
+        if (navigator.vibrate) {
+            navigator.vibrate(200);
+        }
+    }
+
+    // метод проверки форматов
+    isValidCodeFormat(code) {
+        // Проверяем, что код не пустой и имеет минимальную длину
+        if (!code || code.length < 5) {
+            console.log('❌ Слишком короткий код:', code);
+            return false;
+        }
+        
+        // Проверяем на базовые форматы
+        const patterns = [
+            /^[0-9A-Za-z]{10,}$/, // Обычные QR/DataMatrix
+            /^01\d{14}21[A-Za-z0-9]{13,}$/, // GS1 DataMatrix
+            /^[A-Za-z0-9+/=]{20,}$/, // Base64-like коды
+        ];
+        
+        const isValid = patterns.some(pattern => pattern.test(code));
+        
+        if (!isValid) {
+            console.log('❌ Неподдерживаемый формат кода:', code);
+        }
+        
+        return isValid;
     }
 
     addCodeToList(scannedCode) {
