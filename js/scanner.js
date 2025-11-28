@@ -657,21 +657,39 @@ class ScannerManager {
     }
 
     removeCode(code) {
-        console.log('🗑️ Удаление кода:', code.substring(0, 20) + '...');
+        console.log('🗑️ УДАЛЕНИЕ КОДА НА МОБИЛЬНОМ:', code.substring(0, 20) + '...');
         
-        if (window.appState) {
-            window.appState.removeScannedCode(code);
-            console.log('✅ Код удален из AppState');
-        } else {
-            console.error('❌ AppState не доступен');
+        // Проверяем доступность AppState
+        if (!window.appState) {
+            console.error('❌ MOBILE: AppState не доступен');
+            showError('Ошибка: AppState не доступен');
+            return;
         }
+        console.log('✅ MOBILE: AppState доступен');
         
-        // Перезагружаем список кодов
+        // Проверяем метод removeScannedCode
+        if (typeof window.appState.removeScannedCode !== 'function') {
+            console.error('❌ MOBILE: removeScannedCode не функция');
+            showError('Ошибка: removeScannedCode не функция');
+            return;
+        }
+        console.log('✅ MOBILE: removeScannedCode доступен');
+        
+        // Вызываем удаление
+        console.log('📝 MOBILE: Вызываем removeScannedCode...');
+        window.appState.removeScannedCode(code);
+        console.log('✅ MOBILE: removeScannedCode выполнен');
+        
+        // Проверяем результат
+        const session = window.appState.getCurrentSession();
+        console.log(`📊 MOBILE: Кодов после удаления: ${session.scannedCodes.length}`);
+        
+        // Обновляем UI
+        console.log('🔄 MOBILE: Обновляем UI...');
         this.updateCodesList();
-        
-        // Обновляем счетчики
         this.updateUI();
         
+        console.log('✅ MOBILE: Удаление завершено');
         showWarning('Код удален', 2000);
     }
 
@@ -837,7 +855,7 @@ class ScannerManager {
     }
 
     updateCodesList() {
-        console.log('🔄 Обновление списка кодов...');
+        console.log('🔄 Обновление списка кодов (мобильная версия)...');
         
         if (!window.appState) {
             console.error('❌ AppState не доступен');
@@ -851,41 +869,44 @@ class ScannerManager {
         }
         
         const codes = window.appState.getCurrentSession().scannedCodes;
-        console.log(`📊 Отображаем ${codes.length} кодов`);
+        console.log(`📊 МОБИЛЬНЫЙ: Отображаем ${codes.length} кодов`);
         
         // Очищаем список
         codesList.innerHTML = '';
         
         if (codes.length === 0) {
-            console.log('📭 Нет кодов, показываем empty-state');
             codesList.innerHTML = `
                 <div class="empty-state">
                     <span class="empty-icon">📦</span>
                     <p>Нет отсканированных кодов</p>
-                    <small>Начните сканирование или используйте симулятор</small>
+                    <small>Начните сканирование</small>
                 </div>
             `;
         } else {
-            console.log('📝 Добавляем коды в список');
             codes.forEach(scannedCode => {
                 const codeItem = document.createElement('div');
                 codeItem.className = 'code-item';
+                
+                // БЕЗОПАСНОЕ создание HTML для мобильных
+                const safeCode = scannedCode.code.replace(/"/g, '&quot;');
+                
                 codeItem.innerHTML = `
                     <div class="code-info">
                         <div class="code-value">${this.formatCode(scannedCode.code)}</div>
                         <div class="code-time">${new Date(scannedCode.timestamp).toLocaleTimeString()}</div>
                     </div>
                     <div class="code-actions">
-                        <button class="btn btn-sm btn-danger" onclick="scannerManager.removeCode('${scannedCode.code}')">
+                        <button class="btn btn-sm btn-danger remove-code-btn" data-code="${safeCode}">
                             ✕ Удалить
                         </button>
                     </div>
                 `;
+                
                 codesList.appendChild(codeItem);
             });
         }
         
-        console.log('✅ Список кодов обновлен');
+        console.log('✅ МОБИЛЬНЫЙ: Список кодов обновлен');
     }
 
     checkExistingSession() {
@@ -1191,7 +1212,7 @@ class ScannerManager {
         this.setupButton('importContractors', 'importContractorsFromForm');
         this.setupButton('hideImportForm', 'hideAddContractorForm');
     
-        // ДОБАВЬТЕ ЭТИ СТРОКИ для кнопок синхронизации
+        // для кнопок синхронизации
         this.setupSyncButton('exportData');
         this.setupSyncButton('importData'); 
         this.setupSyncButton('showQRCode');
@@ -1215,9 +1236,25 @@ class ScannerManager {
                 this.hideContractorManager();
             }
         });
+    
+        // ✅ ПРАВИЛЬНЫЙ ОБРАБОТЧИК ДЛЯ КНОПОК УДАЛЕНИЯ
+        const handleRemoveClick = (e) => {
+            // Проверяем какую кнопку нажали
+            if (e.target.classList.contains('remove-code-btn')) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const code = e.target.getAttribute('data-code');
+                console.log('📱 Удаление кода:', code);
+                this.removeCode(code);
+            }
+        };
+        
+        // Вешаем оба события для мобильных и десктопов
+        document.addEventListener('click', handleRemoveClick);
+        document.addEventListener('touchend', handleRemoveClick);
     }
     
-    // ВЫНЕСИТЕ ЭТОТ МЕТОД ОТДЕЛЬНО - он должен быть на том же уровне, что и setupEventListeners
     setupSyncButton(methodName) {
         // Ищем кнопки с onclick атрибутом
         const buttons = document.querySelectorAll(`[onclick*="${methodName}"]`);
