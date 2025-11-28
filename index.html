@@ -153,7 +153,7 @@
             <div class="actions-grid">
                 <button id="generateReport" class="btn btn-success" disabled>
                     <span class="btn-icon">📄</span>
-                    Сформировать отчет
+                    Сформировать отчет PDF
                 </button>
                 <button id="clearSession" class="btn btn-danger">
                     <span class="btn-icon">🗑️</span>
@@ -315,7 +315,12 @@
     <!-- ПОДКЛЮЧАЕМ СКРИПТЫ -->
     <script src="js/app-state.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/pdf-generator.js"></script>
     <script src="js/scanner.js"></script>
+
+    <!-- Библиотеки для PDF генерации -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bwip-js@3.11.0/dist/bwip-js.min.js"></script>
 
     <script>
         // ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТЛАДКИ
