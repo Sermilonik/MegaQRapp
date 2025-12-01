@@ -21,7 +21,7 @@ class ScannerManager {
         this.apkMode = false;
         
         // Проверяем AppState
-        this.appState = window.appState || null;
+        this.appState = window.appState;
         console.log('AppState доступен:', this.appState !== null);
 
         // Запускаем инициализацию
