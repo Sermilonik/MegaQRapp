@@ -1,20 +1,28 @@
+<!--index.html-->
 <!DOCTYPE html>
 <html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QR Сканер Склада</title>
-    
-    <!-- PWA -->
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#007bff">
-    
-    <!-- Стили -->
-    <link rel="stylesheet" href="css/styles.css">
-    
-    <!-- Библиотеки -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
-</head>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>QR Сканер Склада</title>
+        
+        <!-- PWA -->
+        <link rel="manifest" href="manifest.json">
+        <meta name="theme-color" content="#007bff">
+        
+        <!-- Стили -->
+        <link rel="stylesheet" href="css/styles.css">
+        
+        <!-- Библиотеки -->
+        <script src="https://unpkg.com/html5-qrcode"></script>
+        
+        <!-- bwip-js (проверенная версия) -->
+        <script src="https://cdn.jsdelivr.net/npm/bwip-js@4.2.0/dist/bwip-js.min.js"></script>
+        
+        <!-- pdfMake -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+    </head>
 <body>
     <div class="container">
         <header class="header">
@@ -64,8 +72,8 @@
         <!-- СТАТУС СЕССИИ -->
         <div id="sessionStatus" class="card status-card hidden">
             <div class="status-header">
-                <span id="statusIcon">⏳</span>
-                <h3 id="statusTitle">Сессия сканирования</h3>
+                <span id="statusIcon">📊</span>
+                <h3>Статус сессии</h3>
             </div>
             <div class="status-info">
                 <div class="status-item">
@@ -73,7 +81,7 @@
                     <span id="currentContractor">-</span>
                 </div>
                 <div class="status-item">
-                    <span class="label">Отсканировано кодов:</span>
+                    <span class="label">Отсканировано:</span>
                     <span id="codesCount" class="badge">0</span>
                 </div>
             </div>
@@ -176,38 +184,30 @@
                 </div>
             </div>
         </div>
-    </div>
-    
-    <!-- синхронизация данных -->
-    <div class="card">
-        <div class="card-header">
-            <h3>☁️ Синхронизация между устройствами</h3>
-            <span id="syncStatus" class="badge badge-warning">⏳ Загрузка...</span>
-        </div>
-        
-        <div class="sync-actions">
-            <button class="btn btn-outline" onclick="scannerManager.exportData()">
-                📤 Экспорт в файл
-            </button>
-            <button class="btn btn-outline" onclick="scannerManager.importData()">
-                📥 Импорт из файла
-            </button>
-            <button class="btn btn-success" onclick="scannerManager.forceSync()" id="forceSyncBtn">
-                🔄 Синхронизировать
-            </button>
-            <button class="btn btn-info" onclick="scannerManager.toggleSync()" id="toggleSyncBtn">
-                ⚡ Автосинхронизация
-            </button>
-            <button class="btn btn-warning" onclick="forceDataAlignment()" id="forceAlignBtn">
-            🎯 Выровнять данные
-            </button>
-        </div>
-        
-        <div id="syncInfo" style="margin-top: 15px; font-size: 12px; color: #666;">
-            <div>📱 Firebase статус: <span id="firebaseStatus">Проверка...</span></div>
-            <div>👤 ID устройства: <span id="deviceId">-</span></div>
-            <div>🔄 Автосинхронизация: <span id="autoSyncStatus">-</span></div>
-            <div>🕐 Последняя синхронизация: <span id="lastSync">-</span></div>
+
+        <!-- СИНХРОНИЗАЦИЯ ДАННЫХ -->
+        <div class="card">
+            <div class="card-header">
+                <h3>☁️ Синхронизация между устройствами</h3>
+                <span id="syncStatus" class="badge badge-warning">⏳ Загрузка...</span>
+            </div>
+            
+            <div class="sync-actions">
+                <button class="btn btn-outline" id="exportDataBtn">
+                    📤 Экспорт в файл
+                </button>
+                <button class="btn btn-outline" id="importDataBtn">
+                    📥 Импорт из файла
+                </button>
+                <button class="btn btn-success" id="forceSyncBtn">
+                    🔄 Синхронизировать
+                </button>
+            </div>
+            
+            <div id="syncInfo" style="margin-top: 15px; font-size: 12px; color: #666;">
+                <div>📱 ID устройства: <span id="deviceId">-</span></div>
+                <div>🕐 Последняя синхронизация: <span id="lastSync">-</span></div>
+            </div>
         </div>
     </div>
     
@@ -219,7 +219,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>👥 Управление контрагентами</h3>
-                <button class="btn btn-sm btn-secondary" id="hideContractorManager">
+                <button class="btn btn-sm btn-secondary" id="hideContractorManagerBtn">
                     ✕ Закрыть
                 </button>
             </div>
@@ -235,15 +235,15 @@
                     <h4>Добавить контрагента</h4>
                     <div class="form-group">
                         <label>Название:</label>
-                        <input type="text" id="contractorName" class="form-select" placeholder="ООО Ромашка">
+                        <input type="text" id="contractorNameInput" class="form-select" placeholder="ООО Ромашка">
                     </div>
                     <div class="form-group">
                         <label>Категория:</label>
-                        <input type="text" id="contractorCategory" class="form-select" placeholder="Оптовый покупатель">
+                        <input type="text" id="contractorCategoryInput" class="form-select" placeholder="Оптовый покупатель">
                     </div>
                     <div class="form-actions">
-                        <button class="btn btn-success" id="addContractor">✅ Добавить</button>
-                        <button class="btn btn-outline" id="hideAddContractorForm">❌ Отмена</button>
+                        <button class="btn btn-success" id="addContractorBtn">✅ Добавить</button>
+                        <button class="btn btn-outline" id="hideAddContractorFormBtn">❌ Отмена</button>
                     </div>
                 </div>
                 
@@ -252,13 +252,13 @@
                     <h4>Импорт контрагентов</h4>
                     <div class="form-group">
                         <label>CSV данные (Название,Категория):</label>
-                        <textarea id="importData" class="form-select" rows="6" placeholder="ООО Ромашка,Оптовый покупатель
+                        <textarea id="importDataTextarea" class="form-select" rows="6" placeholder="ООО Ромашка,Оптовый покупатель
 ИП Иванов,Розничная сеть
 ООО Луч,Дилер"></textarea>
                     </div>
                     <div class="form-actions">
-                        <button class="btn btn-primary" id="importContractors">📥 Импортировать</button>
-                        <button class="btn btn-outline" id="hideImportForm">❌ Отмена</button>
+                        <button class="btn btn-primary" id="importContractorsBtn2">📥 Импортировать</button>
+                        <button class="btn btn-outline" id="hideImportFormBtn">❌ Отмена</button>
                     </div>
                 </div>
                 
@@ -276,215 +276,104 @@
         </div>
     </div>
 
-    <!-- МОБИЛЬНАЯ КОНСОЛЬ ДЛЯ ОТЛАДКИ -->
-    <div id="mobileConsole" style="position: fixed; bottom: 10px; right: 10px; z-index: 10000;">
-        <button onclick="toggleMobileConsole()" style="background: #007bff; color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 20px;">
-            🐛
-        </button>
-        <div id="consolePanel" style="display: none; position: absolute; bottom: 60px; right: 0; width: 320px; height: 300px; background: #1e1e1e; color: #00ff00; border: 2px solid #007bff; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 14px;">
-            <div style="background: #007bff; color: white; padding: 8px; border-radius: 6px 6px 0 0; display: flex; justify-content: space-between; align-items: center;">
-                <strong>Консоль отладки</strong>
-                <div>
-                    <button onclick="clearMobileConsole()" style="background: #ff4444; color: white; border: none; border-radius: 4px; padding: 2px 8px; margin-right: 5px;">🧹</button>
-                    <button onclick="toggleMobileConsole()" style="background: #666; color: white; border: none; border-radius: 4px; padding: 2px 8px;">✕</button>
-                </div>
-            </div>
-            <div id="consoleOutput" style="height: 220px; overflow-y: auto; padding: 10px; border-bottom: 1px solid #333;">
-                <!-- Логи будут здесь -->
-            </div>
-            <div style="padding: 8px;">
-                <input type="text" id="consoleInput" placeholder="Введите команду..." 
-                       style="width: 100%; padding: 8px; border: 1px solid #555; background: #2d2d2d; color: #00ff00; border-radius: 4px; font-family: monospace;"
-                       onkeypress="handleConsoleInput(event)">
-                <small style="color: #888; display: block; margin-top: 5px;">
-                    Команды: debug, contractors, camera, help
-                </small>
-            </div>
-        </div>
-    </div>
-
-    <!-- Firebase SDK v8 -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
-
-    <!-- Firebase Configuration -->
-    <script src="js/firebase-config.js"></script>
-    <script src="js/firebase-sync.js"></script>
-
     <!-- Библиотеки для PDF генерации -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js"></script>
 
-    <!-- ПОДКЛЮЧАЕМ СКРИПТЫ -->
-    <script src="js/app-state.js"></script>
+    <!-- Подключаем скрипты -->
     <script src="js/utils.js"></script>
-    <script src="js/pdfmake-generator.js"></script>
-    <script src="js/simple-qr-generator.js"></script>
+    <script src="js/app-state.js"></script>
+    <script src="js/datamatrix.js"></script>
+    <script src="js/pdf-generator-bwip.js"></script>
+    <!--<script src="js/pdf-generator.js"></script>-->
     <script src="js/scanner.js"></script>
 
     <script>
-        // ГЛОБАЛЬНЫЕ ФУНКЦИИ ДЛЯ ОТЛАДКИ
-        function toggleMobileConsole() {
-            const panel = document.getElementById('consolePanel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        }
-
-        // Проверим доступен ли класс AppState
-        console.log('AppState class:', typeof AppState);
-        console.log('appState instance:', window.appState);
-
-        // Если класс доступен, создадим экземпляр
-        if (typeof AppState !== 'undefined' && !window.appState) {
-            console.log('🔄 Создаем AppState...');
-            window.appState = new AppState();
-            console.log('✅ AppState создан:', window.appState);
-        }
-
-        function clearMobileConsole() {
-            document.getElementById('consoleOutput').innerHTML = '';
-        }
-
-        function handleConsoleInput(event) {
-            if (event.key === 'Enter') {
-                const command = event.target.value.trim();
-                event.target.value = '';
-                executeConsoleCommand(command);
-            }
-        }
-
-        // Функция для принудительной синхронизации всех данных
-        function forceSyncAll() {
-        console.log('🔄 Принудительная синхронизация всех данных...');
-        
-        // 1. Получаем контрагентов из localStorage
-        const contractors = JSON.parse(localStorage.getItem('honest_sign_contractors') || '[]');
-        console.log('📊 Локальные контрагенты:', contractors.length);
-        
-        // 2. Сохраняем в Firebase через AppState
-        if (window.appState && window.appState.syncWithFirebase) {
-            window.appState.syncWithFirebase()
-                .then(result => {
-                    console.log('✅ Синхронизация завершена:', result.length, 'контрагентов');
-                })
-                .catch(error => {
-                    console.error('❌ Ошибка синхронизации:', error);
-                });
-        } else {
-            console.error('❌ AppState не доступен');
-        }
-    }
-
-        // Запускаем синхронизацию
-        forceSyncAll();
-
-        function executeConsoleCommand(command) {
-            const output = document.getElementById('consoleOutput');
-            
-            function addLog(message) {
-                output.innerHTML += `<div style="margin-bottom: 5px;">${message}</div>`;
-                output.scrollTop = output.scrollHeight;
-            }
-
-            addLog(`<span style="color: #ffff00">&gt; ${command}</span>`);
-
-            switch(command.toLowerCase()) {
-                case 'debug':
-                    addLog('<strong>📊 Статус системы:</strong>');
-                    addLog(`• ScannerManager: ${window.scannerManager ? '✅' : '❌'}`);
-                    addLog(`• AppState: ${window.appState ? '✅' : '❌'}`);
-                    if (window.scannerManager) {
-                        addLog(`• Контрагентов: ${scannerManager.allContractors.length}`);
-                        addLog(`• Выбрано: ${scannerManager.selectedContractors.length}`);
-                        addLog(`• Камера: ${scannerManager.isScanning ? '✅' : '❌'}`);
-                    }
-                    break;
-
-                case 'libs':
-                    addLog('<strong>📦 Статус библиотек:</strong>');
-                    addLog(`• jspdf: ${typeof jspdf !== 'undefined' ? '✅' : '❌'}`);
-                    addLog(`• bwipjs: ${typeof bwipjs !== 'undefined' ? '✅' : '❌'}`);
-                    addLog(`• simpleQRGenerator: ${typeof simpleQRGenerator !== 'undefined' ? '✅' : '❌'}`);
-                    addLog(`• Html5Qrcode: ${typeof Html5Qrcode !== 'undefined' ? '✅' : '❌'}`);
-                    addLog(`• firebase: ${typeof firebase !== 'undefined' ? '✅' : '❌'}`);
-                    break;
-                    
-                case 'contractors':
-                    if (window.scannerManager) {
-                        addLog('<strong>👥 Контрагенты:</strong>');
-                        scannerManager.allContractors.forEach(c => {
-                            addLog(`• ${c.name} (${c.category})`);
-                        });
-                    } else {
-                        addLog('❌ ScannerManager не доступен');
-                    }
-                    break;
-                    
-                case 'camera':
-                    addLog('<strong>📷 Проверка камеры:</strong>');
-                    if (navigator.mediaDevices) {
-                        navigator.mediaDevices.enumerateDevices()
-                            .then(devices => {
-                                const cameras = devices.filter(d => d.kind === 'videoinput');
-                                addLog(`• Найдено камер: ${cameras.length}`);
-                                cameras.forEach((cam, i) => {
-                                    addLog(`  ${i+1}. ${cam.label || 'Камера ' + (i+1)}`);
-                                });
-                            })
-                            .catch(error => {
-                                addLog(`❌ Ошибка: ${error.message}`);
-                            });
-                    } else {
-                        addLog('❌ mediaDevices не поддерживается');
-                    }
-                    break;
-                    
-                case 'help':
-                    addLog('<strong>📋 Команды:</strong>');
-                    addLog('• <strong>debug</strong> - статус системы');
-                    addLog('• <strong>contractors</strong> - список контрагентов');
-                    addLog('• <strong>camera</strong> - проверка камеры');
-                    addLog('• <strong>clear</strong> - очистить консоль');
-                    addLog('• <strong>help</strong> - эта справка');
-                    break;
-                    
-                case 'clear':
-                    clearMobileConsole();
-                    break;
-                    
-                default:
-                    if (command) {
-                        addLog(`❌ Неизвестная команда: "${command}"`);
-                    }
-            }
-        }
-
-        // Перехват console.log для отображения в мобильной консоли
-        const originalLog = console.log;
-        console.log = function(...args) {
-            originalLog.apply(console, args);
-            const message = args.map(arg => 
-                typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-            ).join(' ');
-            const output = document.getElementById('consoleOutput');
-            if (output) {
-                output.innerHTML += `<div style="color: #00ff00; margin-bottom: 3px;">${message}</div>`;
-                output.scrollTop = output.scrollHeight;
-            }
-        };
-
         // Инициализация при загрузке
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('📄 Страница загружена');
+            console.log('📄 DOM загружен');
             
-            // Проверяем загрузку ScannerManager
+            // Проверяем библиотеки
+            console.log('🔍 Проверка библиотек:');
+            console.log('- Html5Qrcode:', typeof Html5Qrcode !== 'undefined' ? '✅ загружен' : '❌ не загружен');
+            console.log('- pdfMake:', typeof pdfMake !== 'undefined' ? '✅ загружен' : '❌ не загружен');
+            
+            // Создаем эмулятор bwipjs, так как библиотека не загружается
+            if (typeof bwipjs === 'undefined') {
+                console.log('⚠️ bwip-js не загружен, создаем эмулятор...');
+                
+                window.bwipjs = {
+                    toCanvas: function(canvas, options) {
+                        console.log('Используем эмулятор bwip-js для:', options.text?.substring(0, 20) + '...');
+                        
+                        const ctx = canvas.getContext('2d');
+                        const size = canvas.width;
+                        const data = options.text || '';
+                        
+                        // Используем простой генератор
+                        if (window.simpleDataMatrix && window.simpleDataMatrix.generateDataMatrix) {
+                            window.simpleDataMatrix.generateDataMatrix(data, size).then(dataUrl => {
+                                const img = new Image();
+                                img.onload = function() {
+                                    ctx.clearRect(0, 0, size, size);
+                                    ctx.drawImage(img, 0, 0, size, size);
+                                };
+                                img.src = dataUrl;
+                            });
+                        } else {
+                            // Простой fallback
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.fillRect(0, 0, size, size);
+                            ctx.fillStyle = '#000000';
+                            ctx.font = '10px Arial';
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText('DM', size/2, size/2);
+                            ctx.fillText(data.substring(0, 5), size/2, size/2 + 15);
+                        }
+                    }
+                };
+                
+                console.log('✅ Создан эмулятор bwip-js');
+            } else {
+                console.log('✅ bwip-js загружен');
+            }
+            
+            // Инициализируем приложение
             setTimeout(() => {
-                if (!window.scannerManager) {
-                    console.error('❌ ScannerManager не инициализирован');
-                } else {
-                    console.log('✅ ScannerManager готов');
+                if (typeof ScannerManager !== 'undefined' && !window.scannerManager) {
+                    try {
+                        window.scannerManager = new ScannerManager();
+                        console.log('✅ ScannerManager инициализирован');
+                        
+                        // Показываем статус
+                        showSuccess('Приложение готово к работе!', 3000);
+                    } catch (error) {
+                        console.error('❌ Ошибка инициализации ScannerManager:', error);
+                        showError('Ошибка загрузки приложения: ' + error.message);
+                    }
                 }
-            }, 1000);
+            }, 500);
         });
+        
+        // Функция для проверки загрузки всех скриптов
+        function checkScripts() {
+            const scripts = [
+                { name: 'Utils', check: typeof showSuccess !== 'undefined' },
+                { name: 'AppState', check: typeof AppState !== 'undefined' },
+                { name: 'SimpleDataMatrix', check: typeof simpleDataMatrix !== 'undefined' },
+                { name: 'PDFGenerator', check: typeof pdfMakeGenerator !== 'undefined' },
+                { name: 'ScannerManager', check: typeof ScannerManager !== 'undefined' }
+            ];
+            
+            console.log('📋 Статус загрузки скриптов:');
+            scripts.forEach(script => {
+                console.log(`- ${script.name}: ${script.check ? '✅' : '❌'}`);
+            });
+        }
+        
+        // Проверяем через 2 секунды
+        setTimeout(checkScripts, 2000);
     </script>
 </body>
 </html>
