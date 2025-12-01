@@ -1,14 +1,8 @@
+//app-state.js
 class AppState {
     constructor() {
         this.contractors = [];
-        this.currentSession = {
-            id: null,
-            contractorIds: [],
-            scannedCodes: [],
-            createdAt: null
-        };
-        
-        this.sentSessions = [];
+        this.currentSession = {};
         this.reports = [];
         this.reportCounter = 1;
         this.firebaseSync = null;
@@ -18,84 +12,91 @@ class AppState {
     
     async init() {
         this.loadContractors();
-        this.loadFromStorage();
-        this.ensureDefaultContractors();
+        this.loadSession();
+        this.loadReports();
         
         // Инициализируем Firebase синхронизацию
         await this.initFirebaseSync();
     }
-
-    // Инициализация Firebase синхронизации
+    
     async initFirebaseSync() {
-        console.log('🔄 AppState: Инициализация Firebase синхронизации...');
-        
-        if (typeof initFirebaseSync === 'function') {
-            try {
-                // Ждем инициализации FirebaseSyncManager
-                let attempts = 0;
-                while (attempts < 10) {
-                    this.firebaseSync = initFirebaseSync();
-                    if (this.firebaseSync && this.firebaseSync.isConnected) {
-                        console.log('✅ AppState: Firebase синхронизация активирована');
-                        break;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 500));
-                    attempts++;
-                }
+        try {
+            if (typeof FirebaseSync !== 'undefined') {
+                this.firebaseSync = new FirebaseSync();
+                const success = await this.firebaseSync.init();
                 
-                if (this.firebaseSync && this.firebaseSync.isConnected) {
-                    // Синхронизируем данные при старте
-                    setTimeout(async () => {
-                        await this.syncWithFirebase();
-                    }, 3000);
-                } else {
-                    console.log('ℹ️ AppState: Firebase синхронизация недоступна');
+                if (success) {
+                    console.log('✅ Firebase синхронизация активирована');
+                    // Первая синхронизация
+                    await this.syncWithFirebase();
                 }
-            } catch (error) {
-                console.error('❌ AppState: Ошибка инициализации Firebase:', error);
-                this.firebaseSync = null;
+            } else {
+                console.log('ℹ️ FirebaseSync не загружен, работаем локально');
             }
-        } else {
-            console.log('ℹ️ AppState: Модуль FirebaseSync не загружен');
+        } catch (error) {
+            console.error('❌ Ошибка инициализации Firebase:', error);
         }
     }
-
-    // Синхронизация с Firebase
+    
     async syncWithFirebase() {
-        console.log('🔄 AppState: Синхронизация с Firebase...');
-        
-        if (!this.firebaseSync || !this.firebaseSync.isConnected) {
-            console.log('🔄 AppState: Firebase не доступен');
+        if (!this.firebaseSync) {
+            console.log('ℹ️ FirebaseSync не доступен');
             return this.contractors;
         }
-    
+        
         try {
-            // Загружаем данные из Firebase
-            const cloudContractors = await this.firebaseSync.loadFromFirebase();
+            console.log('🔄 Синхронизация с Firebase...');
             
-            if (!cloudContractors || cloudContractors.length === 0) {
-                console.log('☁️ В облаке нет данных, сохраняем локальные...');
-                await this.firebaseSync.saveContractorsToFirebase(this.contractors);
-                return this.contractors;
+            // Синхронизируем контрагентов
+            const syncedContractors = await this.firebaseSync.syncContractors(this.contractors);
+            
+            // Обновляем локальные данные если они изменились
+            if (syncedContractors.length !== this.contractors.length ||
+                JSON.stringify(syncedContractors) !== JSON.stringify(this.contractors)) {
+                
+                this.contractors = syncedContractors;
+                this.saveContractors();
+                console.log(`✅ Данные синхронизированы: ${this.contractors.length} контрагентов`);
             }
-    
-            // Объединяем данные
-            const mergedContractors = this.mergeContractors(this.contractors, cloudContractors);
             
-            // Сохраняем объединенные данные обратно
-            await this.firebaseSync.saveContractorsToFirebase(mergedContractors);
-            
-            // Обновляем локальные данные
-            this.contractors = mergedContractors;
-            this.saveContractors();
-            
-            console.log(`🔄 Синхронизация завершена. Результат: ${mergedContractors.length} контрагентов`);
-            
-            return mergedContractors;
-    
-        } catch (error) {
-            console.error('❌ AppState: Ошибка синхронизации с Firebase:', error);
             return this.contractors;
+            
+        } catch (error) {
+            console.error('❌ Ошибка синхронизации:', error);
+            return this.contractors;
+        }
+    }
+    
+    updateContractorFromSync(contractorData) {
+        // Обновляем контрагента из облака
+        const index = this.contractors.findIndex(c => c.id === contractorData.id);
+        
+        if (index >= 0) {
+            // Обновляем существующего
+            this.contractors[index] = contractorData;
+        } else {
+            // Добавляем нового
+            this.contractors.push(contractorData);
+        }
+        
+        this.saveContractors();
+        console.log('📡 Контрагент обновлен из облака:', contractorData.name);
+    }
+
+    toggleSync() {
+        if (!this.firebaseSync) {
+            showError('Firebase синхронизация не доступна');
+            return;
+        }
+        
+        const currentStatus = this.firebaseSync.syncEnabled;
+        this.firebaseSync.setSyncEnabled(!currentStatus);
+        
+        showSuccess(`Автосинхронизация ${!currentStatus ? 'включена' : 'выключена'}`, 3000);
+        
+        // Обновляем UI
+        if (window.scannerManager) {
+            window.scannerManager.updateSyncUI();
         }
     }
 
