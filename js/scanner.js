@@ -46,8 +46,65 @@ class ScannerManager {
         // Проверяем камеру
         await this.checkCameraAvailability();
         
+        // Загружаем отчеты
+        this.loadReportsList();
+        
+        // Обновляем UI синхронизации (с задержкой чтобы Firebase успел инициализироваться)
+        setTimeout(() => {
+            this.updateSyncUI();
+            console.log('🔄 UI синхронизации обновлен');
+        }, 3000);
+        
+        // Периодическое обновление статуса синхронизации
+        setInterval(() => {
+            this.updateSyncUI();
+            console.log('🔄 Периодическое обновление статуса синхронизации');
+        }, 30000); // каждые 30 секунд
+        
+        // Также обновляем статус синхронизации при изменении данных
+        this.setupSyncDataListeners();
+        
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
+    }
+
+    setupSyncDataListeners() {
+        console.log('🔧 Настройка слушателей данных синхронизации...');
+        
+        // Слушаем изменения в localStorage для синхронизации
+        window.addEventListener('storage', (event) => {
+            if (event.key === 'honest_sign_contractors' || 
+                event.key === 'honest_sign_session' ||
+                event.key === 'honest_sign_reports') {
+                
+                console.log('📡 Обнаружено изменение в localStorage:', event.key);
+                
+                // Обновляем соответствующие данные
+                if (event.key === 'honest_sign_contractors') {
+                    this.loadContractors();
+                    console.log('🔄 Контрагенты перезагружены из localStorage');
+                }
+                
+                // Обновляем UI синхронизации
+                this.updateSyncUI();
+            }
+        });
+        
+        // Также обновляем UI при изменении выбранных контрагентов
+        const originalUpdateSelectedContractorsUI = this.updateSelectedContractorsUI.bind(this);
+        this.updateSelectedContractorsUI = () => {
+            originalUpdateSelectedContractorsUI();
+            this.updateSyncUI(); // Обновляем статус синхронизации
+        };
+        
+        // И при обновлении UI
+        const originalUpdateUI = this.updateUI.bind(this);
+        this.updateUI = () => {
+            originalUpdateUI();
+            this.updateSyncUI(); // Обновляем статус синхронизации
+        };
+        
+        console.log('✅ Слушатели данных синхронизации настроены');
     }
 
     optimizeForAPK() {
@@ -57,6 +114,36 @@ class ScannerManager {
         if (isInAPK || isWebView) {
             console.log('📱 APK режим активирован');
             this.apkMode = true;
+
+            this.applyAPKOptimizations();
+        }
+    }
+
+    // Метод для оптимизаций APK
+    applyAPKOptimizations() {
+        // Упрощаем интерфейс для APK
+        if (this.apkMode) {
+            console.log('🎯 Применение оптимизаций для APK...');
+            
+            // Можно добавить специфичные оптимизации:
+            // - Упрощенный UI
+            // - Кэширование ресурсов
+            // - Оптимизация производительности
+            
+            // Пример: скрыть сложные элементы
+            const complexElements = document.querySelectorAll('.desktop-only, .advanced-feature');
+            complexElements.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Увеличиваем touch-targets для мобильных
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => {
+                btn.style.minHeight = '44px';
+                btn.style.padding = '12px 16px';
+            });
+            
+            console.log('✅ Оптимизации для APK применены');
         }
     }
 
@@ -797,6 +884,148 @@ class ScannerManager {
             console.error('❌ Ошибка формирования отчета:', error);
             showError('Ошибка создания отчета: ' + error.message);
         }
+    }
+
+    updateSyncUI() {
+        try {
+            if (!window.appState) {
+                console.log('ℹ️ AppState не доступен для обновления UI синхронизации');
+                return;
+            }
+            
+            if (!window.appState.firebaseSync) {
+                // Обновляем UI даже если Firebase не доступен
+                const syncStatus = document.getElementById('syncStatus');
+                const firebaseStatus = document.getElementById('firebaseStatus');
+                const deviceId = document.getElementById('deviceId');
+                const autoSyncStatus = document.getElementById('autoSyncStatus');
+                const lastSync = document.getElementById('lastSync');
+                
+                if (syncStatus) {
+                    syncStatus.textContent = '❌ Не доступна';
+                    syncStatus.className = 'badge badge-danger';
+                }
+                
+                if (firebaseStatus) {
+                    firebaseStatus.textContent = '❌ Не подключено';
+                    firebaseStatus.style.color = '#dc3545';
+                }
+                
+                if (deviceId) {
+                    const localDeviceId = localStorage.getItem('honest_sign_device_id') || 'не задан';
+                    deviceId.textContent = localDeviceId.substring(0, 10) + '...';
+                }
+                
+                if (autoSyncStatus) {
+                    autoSyncStatus.textContent = '❌ Выключена';
+                    autoSyncStatus.style.color = '#dc3545';
+                }
+                
+                if (lastSync) {
+                    lastSync.textContent = 'никогда';
+                }
+                
+                return;
+            }
+            
+            // Получаем статус синхронизации
+            const status = window.appState.firebaseSync.getSyncStatus();
+            
+            // Обновляем все элементы UI
+            const elements = {
+                syncStatus: document.getElementById('syncStatus'),
+                firebaseStatus: document.getElementById('firebaseStatus'),
+                deviceId: document.getElementById('deviceId'),
+                autoSyncStatus: document.getElementById('autoSyncStatus'),
+                lastSync: document.getElementById('lastSync'),
+                toggleBtn: document.getElementById('toggleSyncBtn'),
+                forceSyncBtn: document.getElementById('forceSyncBtn')
+            };
+            
+            // Статус синхронизации
+            if (elements.syncStatus) {
+                if (status.isConnected && status.syncEnabled) {
+                    elements.syncStatus.textContent = '✅ Включена';
+                    elements.syncStatus.className = 'badge badge-success';
+                } else if (status.isConnected) {
+                    elements.syncStatus.textContent = '⏸️ Выключена';
+                    elements.syncStatus.className = 'badge badge-warning';
+                } else {
+                    elements.syncStatus.textContent = '❌ Ошибка';
+                    elements.syncStatus.className = 'badge badge-danger';
+                }
+            }
+            
+            // Статус Firebase
+            if (elements.firebaseStatus) {
+                elements.firebaseStatus.textContent = status.isConnected ? '✅ Подключено' : '❌ Ошибка';
+                elements.firebaseStatus.style.color = status.isConnected ? '#28a745' : '#dc3545';
+            }
+            
+            // ID устройства
+            if (elements.deviceId) {
+                elements.deviceId.textContent = status.deviceId ? 
+                    status.deviceId.substring(0, 10) + '...' : 
+                    'не задан';
+            }
+            
+            // Статус автосинхронизации
+            if (elements.autoSyncStatus) {
+                elements.autoSyncStatus.textContent = status.syncEnabled ? '✅ Включена' : '❌ Выключена';
+                elements.autoSyncStatus.style.color = status.syncEnabled ? '#28a745' : '#dc3545';
+            }
+            
+            // Последняя синхронизация
+            if (elements.lastSync) {
+                elements.lastSync.textContent = status.lastSync ? 
+                    new Date(status.lastSync).toLocaleTimeString() : 
+                    'никогда';
+            }
+            
+            // Кнопки
+            if (elements.toggleBtn) {
+                elements.toggleBtn.textContent = status.syncEnabled ? 
+                    '⏸️ Выключить автосинхронизацию' : 
+                    '⚡ Включить автосинхронизацию';
+                
+                elements.toggleBtn.disabled = !status.isConnected;
+            }
+            
+            if (elements.forceSyncBtn) {
+                elements.forceSyncBtn.disabled = !status.isConnected;
+            }
+            
+            console.log('🔄 UI синхронизации обновлен:', {
+                connected: status.isConnected,
+                syncEnabled: status.syncEnabled,
+                deviceId: status.deviceId?.substring(0, 10)
+            });
+            
+        } catch (error) {
+            console.error('❌ Ошибка обновления UI синхронизации:', error);
+        }
+    }
+
+    testSyncConnection() {
+        console.log('🧪 Тест подключения к Firebase...');
+        
+        if (!window.appState || !window.appState.firebaseSync) {
+            console.error('❌ FirebaseSync не доступен');
+            showError('Firebase синхронизация не доступна');
+            return;
+        }
+        
+        const status = window.appState.firebaseSync.getSyncStatus();
+        console.log('📊 Статус синхронизации:', status);
+        
+        // Пробуем выполнить простую операцию
+        window.appState.syncWithFirebase().then(result => {
+            console.log('✅ Тест синхронизации пройден:', result.length, 'контрагентов');
+            showSuccess(`Синхронизация работает! Контрагентов: ${result.length}`, 3000);
+        }).catch(error => {
+            console.error('❌ Тест синхронизации не пройден:', error);
+            showError('Ошибка синхронизации: ' + error.message);
+        });
     }
 
     // вспомогательные методы для работы с сессией
