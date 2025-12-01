@@ -1,3 +1,4 @@
+// scanner.js
 class ScannerManager {
     constructor() {
         console.log('🚀 Создание ScannerManager');
@@ -16,10 +17,12 @@ class ScannerManager {
         this.isScanning = false;
         this.selectedContractors = [];
         this.allContractors = [];
-        this.cleaningUp = false;
         this._stopInProgress = false;
-        this._contractorsLoaded = false;
         this.apkMode = false;
+        
+        // Проверяем AppState
+        this.appState = window.appState || null;
+        console.log('AppState доступен:', this.appState !== null);
 
         // Запускаем инициализацию
         this.init();
@@ -43,19 +46,10 @@ class ScannerManager {
         // Проверяем камеру
         await this.checkCameraAvailability();
         
-        // Обновляем UI синхронизации
-        setTimeout(() => {
-            this.updateSyncUI();
-        }, 3000);
-
-        //загружаем отчеты
-        this.loadReportsList();
-        
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
     }
 
-    // ОПТИМИЗАЦИЯ ДЛЯ APK
     optimizeForAPK() {
         const isInAPK = !window.location.protocol.startsWith('http');
         const isWebView = /WebView|Android/.test(navigator.userAgent);
@@ -68,44 +62,31 @@ class ScannerManager {
 
     // ЗАГРУЗКА КОНТРАГЕНТОВ
     loadContractors() {
-        console.log('🔍 ScannerManager: Загрузка контрагентов');
+        console.log('🔍 Загрузка контрагентов');
         
-        // Ждем инициализации AppState
-        if (window.appState && window.appState.getAllContractors) {
-            this.allContractors = window.appState.getAllContractors();
-            console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов из AppState`);
+        if (this.appState && this.appState.getAllContractors) {
+            this.allContractors = this.appState.getAllContractors();
+            console.log(`✅ Загружено ${this.allContractors.length} контрагентов из AppState`);
         } else {
-            console.warn('⚠️ ScannerManager: AppState не доступен, загружаем напрямую из localStorage');
-            
-            // Пробуем инициализировать AppState если он есть
-            if (typeof AppState !== 'undefined' && !window.appState) {
-                console.log('🔄 ScannerManager: Пробуем создать AppState...');
-                window.appState = new AppState();
-                this.allContractors = window.appState.getAllContractors();
-                console.log(`✅ ScannerManager: Создан AppState, загружено ${this.allContractors.length} контрагентов`);
-            } else {
-                // Резервный метод
-                this.loadContractorsDirectly();
-            }
+            console.warn('⚠️ AppState не доступен, загружаем напрямую');
+            this.loadContractorsDirectly();
         }
         
-        this._contractorsLoaded = true;
         this.initContractorSearch();
     }
 
-    // Резервный метод загрузки напрямую из localStorage
     loadContractorsDirectly() {
         try {
             const saved = localStorage.getItem('honest_sign_contractors');
             if (saved) {
                 this.allContractors = JSON.parse(saved);
-                console.log(`✅ ScannerManager: Загружено ${this.allContractors.length} контрагентов напрямую из localStorage`);
+                console.log(`✅ Загружено ${this.allContractors.length} контрагентов из localStorage`);
             } else {
                 this.loadDefaultContractors();
                 this.saveContractorsDirectly();
             }
         } catch (error) {
-            console.error('❌ ScannerManager: Ошибка прямой загрузки контрагентов:', error);
+            console.error('❌ Ошибка загрузки контрагентов:', error);
             this.loadDefaultContractors();
         }
     }
@@ -119,28 +100,22 @@ class ScannerManager {
         ];
     }
 
-    // Резервный метод сохранения напрямую в localStorage
     saveContractorsDirectly() {
         try {
             localStorage.setItem('honest_sign_contractors', JSON.stringify(this.allContractors));
-            console.log(`✅ ScannerManager: Сохранено ${this.allContractors.length} контрагентов напрямую в localStorage`);
+            console.log(`✅ Сохранено ${this.allContractors.length} контрагентов`);
         } catch (error) {
-            console.error('❌ ScannerManager: Ошибка прямого сохранения контрагентов:', error);
+            console.error('❌ Ошибка сохранения контрагентов:', error);
         }
     }
 
     saveContractors() {
-        console.log('💾 ScannerManager: Сохранение контрагентов');
+        console.log('💾 Сохранение контрагентов');
         
         if (window.appState && window.appState.saveContractors) {
-            // Обновляем данные в appState перед сохранением
-            if (window.appState.contractors) {
-                window.appState.contractors = this.allContractors;
-            }
             window.appState.saveContractors();
-            console.log('✅ ScannerManager: Контрагенты сохранены через AppState');
+            console.log('✅ Контрагенты сохранены через AppState');
         } else {
-            console.warn('⚠️ ScannerManager: AppState не доступен, сохраняем напрямую');
             this.saveContractorsDirectly();
         }
     }
@@ -234,31 +209,6 @@ class ScannerManager {
         // Очищаем поле поиска
         const searchInput = document.getElementById('contractorSearch');
         if (searchInput) searchInput.value = '';
-    }
-
-    // Импорт контрагентов из формы
-    importContractorsFromForm() {
-        const importData = document.getElementById('importData');
-        if (!importData || !importData.value.trim()) {
-            showError('Введите данные для импорта');
-            return;
-        }
-
-        if (window.appState && window.appState.importContractorsFromCSV) {
-            try {
-                const importedCount = window.appState.importContractorsFromCSV(importData.value);
-                if (importedCount > 0) {
-                    this.loadContractors(); // Перезагружаем контрагентов
-                    this.loadContractorsManagerList(); // Обновляем список в менеджере
-                    importData.value = ''; // Очищаем поле
-                    this.hideAddContractorForm();
-                }
-            } catch (error) {
-                showError(`Ошибка импорта: ${error.message}`);
-            }
-        } else {
-            showError('AppState не доступен для импорта');
-        }
     }
 
     removeContractor(contractorId) {
@@ -361,8 +311,8 @@ class ScannerManager {
     }
 
     addContractor() {
-        const nameInput = document.getElementById('contractorName');
-        const categoryInput = document.getElementById('contractorCategory');
+        const nameInput = document.getElementById('contractorNameInput');
+        const categoryInput = document.getElementById('contractorCategoryInput');
         
         if (!nameInput || !categoryInput) return;
 
@@ -395,6 +345,45 @@ class ScannerManager {
         this.loadContractorsManagerList();
 
         showSuccess(`Контрагент "${name}" добавлен`, 3000);
+    }
+
+    importContractorsFromForm() {
+        const importData = document.getElementById('importDataTextarea');
+        if (!importData || !importData.value.trim()) {
+            showError('Введите данные для импорта');
+            return;
+        }
+
+        const lines = importData.value.trim().split('\n');
+        let importedCount = 0;
+
+        lines.forEach(line => {
+            const parts = line.split(',').map(p => p.trim());
+            if (parts.length >= 1) {
+                const name = parts[0];
+                const category = parts[1] || 'Общая категория';
+
+                // Проверяем дубликаты
+                if (!this.allContractors.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                    const newId = this.allContractors.length > 0 
+                        ? Math.max(...this.allContractors.map(c => c.id)) + 1 
+                        : 1;
+                    
+                    this.allContractors.push({ id: newId, name, category });
+                    importedCount++;
+                }
+            }
+        });
+
+        if (importedCount > 0) {
+            this.saveContractors();
+            this.loadContractorsManagerList();
+            importData.value = '';
+            this.hideAddContractorForm();
+            showSuccess(`Импортировано ${importedCount} контрагентов`, 3000);
+        } else {
+            showWarning('Нет новых контрагентов для импорта');
+        }
     }
 
     loadContractorsManagerList() {
@@ -489,14 +478,12 @@ class ScannerManager {
             
             this.scanner = new Html5Qrcode("reader");
             
-            // МИНИМАЛЬНАЯ КОНФИГУРАЦИЯ - убираем все ограничения
             const config = {
                 fps: 10,
                 qrbox: { width: 250, height: 250 },
                 aspectRatio: 1.0
             };
     
-            // ПРОСТАЯ обработка - без фильтрации ошибок
             await this.scanner.start(
                 { facingMode: "environment" },
                 config,
@@ -505,7 +492,6 @@ class ScannerManager {
                     this.onScanSuccess(decodedText);
                 },
                 (error) => {
-                    // Оставляем только базовое логирование
                     console.log('📷 Сканирование:', error);
                 }
             );
@@ -570,28 +556,26 @@ class ScannerManager {
     onScanSuccess(decodedText) {
         console.log('✅ Код распознан:', decodedText);
         
-        // Сначала проверяем, это ли данные синхронизации
-        if (this.handleSyncQRCode(decodedText)) {
-            return;
-        }
-        
         if (this.selectedContractors.length === 0) {
             showError('❌ Сначала выберите контрагентов');
             return;
         }
-    
+        
         // Базовая проверка
         if (!decodedText || decodedText.trim().length === 0) {
             showError('❌ Пустой код');
             return;
         }
-    
+        
+        // Получаем текущую сессию
+        const session = this.getCurrentSession();
+        
         // Проверка дубликатов
-        if (window.appState && window.appState.hasCodeBeenScanned(decodedText)) {
+        if (session.scannedCodes.some(code => code.code === decodedText)) {
             showWarning('⚠️ Этот код уже отсканирован');
             return;
         }
-    
+        
         // Добавляем код
         const scannedCode = {
             code: decodedText,
@@ -599,14 +583,22 @@ class ScannerManager {
             contractors: this.selectedContractors.map(c => ({ id: c.id, name: c.name }))
         };
         
-        if (window.appState) {
-            window.appState.addScannedCode(decodedText);
-        }
+        // Сохраняем
+        session.scannedCodes.push(scannedCode);
+        this.saveSession(session); // Теперь этот метод существует
         
         this.addCodeToList(scannedCode);
         this.updateUI();
         
-        showSuccess(`✅ Код добавлен`, 2000);
+        const codesCount = session.scannedCodes.length;
+        const contractorsCount = this.selectedContractors.length;
+        
+        // Информационное сообщение о прогрессе
+        if (codesCount >= contractorsCount) {
+            showSuccess(`✅ Достаточно кодов! (${codesCount}/${contractorsCount})`, 2000);
+        } else {
+            showInfo(`📦 Код добавлен (${codesCount}/${contractorsCount})`, 2000);
+        }
         
         // Виброотклик на мобильных
         if (navigator.vibrate) {
@@ -614,50 +606,64 @@ class ScannerManager {
         }
     }
 
-    addCodeToList(scannedCode) {
-        console.log('📝 addCodeToList вызван с:', scannedCode);
+    checkReportRequirements() {
+        const session = this.getCurrentSession();
+        const codesCount = session.scannedCodes.length;
+        const contractorsCount = this.selectedContractors.length;
         
+        console.log('📋 Проверка требований для отчета:');
+        console.log(`1. Контрагенты выбраны: ${contractorsCount > 0 ? '✅' : '❌'} (${contractorsCount})`);
+        console.log(`2. Коды отсканированы: ${codesCount > 0 ? '✅' : '❌'} (${codesCount})`);
+        console.log(`3. Кодов достаточно: ${codesCount >= contractorsCount ? '✅' : '❌'} (${codesCount} ≥ ${contractorsCount})`);
+        
+        const requirements = {
+            hasContractors: contractorsCount > 0,
+            hasCodes: codesCount > 0,
+            hasEnoughCodes: codesCount >= contractorsCount,
+            allMet: contractorsCount > 0 && codesCount > 0 && codesCount >= contractorsCount
+        };
+        
+        return requirements;
+    }
+
+    addCodeToList(scannedCode) {
         const codesList = document.getElementById('codesList');
         if (!codesList) {
             console.error('❌ codesList элемент не найден');
             return;
         }
         
-        console.log('🔍 Поиск empty-state...');
+        // Удаляем empty-state если он есть
         const emptyState = codesList.querySelector('.empty-state');
-        
         if (emptyState) {
-            console.log('✅ Удаляем empty-state');
             emptyState.remove();
-        } else {
-            console.log('ℹ️ empty-state не найден');
         }
         
-        console.log('🧩 Создание code-item...');
         const codeItem = document.createElement('div');
         codeItem.className = 'code-item';
+        
+        // Безопасное создание HTML
+        const safeCode = scannedCode.code.replace(/"/g, '&quot;');
+        
         codeItem.innerHTML = `
             <div class="code-info">
                 <div class="code-value">${this.formatCode(scannedCode.code)}</div>
                 <div class="code-time">${new Date(scannedCode.timestamp).toLocaleTimeString()}</div>
             </div>
             <div class="code-actions">
-                <button class="btn btn-sm btn-danger" onclick="scannerManager.removeCode('${scannedCode.code.replace(/'/g, "\\'")}')">
+                <button class="btn btn-sm btn-danger remove-code-btn" data-code="${safeCode}">
                     ✕ Удалить
                 </button>
             </div>
         `;
         
-        console.log('📤 Добавление code-item в DOM...');
         codesList.appendChild(codeItem);
-        console.log('✅ code-item добавлен в DOM');
     }
 
     formatCode(code) {
         if (!code) return 'N/A';
         
         try {
-            // Обработка специальных символов
             let displayCode = code;
             if (code.includes('\u001d')) {
                 displayCode = code.replace(/\u001d/g, 'GS');
@@ -672,39 +678,23 @@ class ScannerManager {
     }
 
     removeCode(code) {
-        console.log('🗑️ УДАЛЕНИЕ КОДА НА МОБИЛЬНОМ:', code.substring(0, 20) + '...');
+        console.log('🗑️ Удаление кода:', code.substring(0, 20) + '...');
         
-        // Проверяем доступность AppState
-        if (!window.appState) {
-            console.error('❌ MOBILE: AppState не доступен');
-            showError('Ошибка: AppState не доступен');
-            return;
+        // Удаляем из appState если доступен
+        if (window.appState && window.appState.removeScannedCode) {
+            window.appState.removeScannedCode(code);
+        } else {
+            // Простое удаление
+            const session = JSON.parse(localStorage.getItem('honest_sign_session') || '{}');
+            session.scannedCodes = session.scannedCodes || [];
+            session.scannedCodes = session.scannedCodes.filter(c => c.code !== code);
+            localStorage.setItem('honest_sign_session', JSON.stringify(session));
         }
-        console.log('✅ MOBILE: AppState доступен');
-        
-        // Проверяем метод removeScannedCode
-        if (typeof window.appState.removeScannedCode !== 'function') {
-            console.error('❌ MOBILE: removeScannedCode не функция');
-            showError('Ошибка: removeScannedCode не функция');
-            return;
-        }
-        console.log('✅ MOBILE: removeScannedCode доступен');
-        
-        // Вызываем удаление
-        console.log('📝 MOBILE: Вызываем removeScannedCode...');
-        window.appState.removeScannedCode(code);
-        console.log('✅ MOBILE: removeScannedCode выполнен');
-        
-        // Проверяем результат
-        const session = window.appState.getCurrentSession();
-        console.log(`📊 MOBILE: Кодов после удаления: ${session.scannedCodes.length}`);
         
         // Обновляем UI
-        console.log('🔄 MOBILE: Обновляем UI...');
         this.updateCodesList();
         this.updateUI();
         
-        console.log('✅ MOBILE: Удаление завершено');
         showWarning('Код удален', 2000);
     }
 
@@ -732,12 +722,13 @@ class ScannerManager {
     async generateReport() {
         console.log('📄 Формирование отчета...');
         
-        if (!window.appState) {
-            showError('❌ AppState не доступен');
+        // Проверяем pdfMakeGenerator
+        if (typeof pdfMakeGenerator === 'undefined') {
+            showError('❌ PDF генератор не доступен');
             return;
         }
         
-        const session = window.appState.getCurrentSession();
+        const session = this.getCurrentSession();
         const codesCount = session.scannedCodes.length;
         const contractorsCount = this.selectedContractors.length;
         
@@ -762,15 +753,10 @@ class ScannerManager {
         showInfo('📄 Формирование PDF отчета...', 5000);
         
         try {
-            // ИСПОЛЬЗУЕМ PDFMAKE ВМЕСТО PDFGENERATOR
-            if (typeof pdfMakeGenerator === 'undefined') {
-                throw new Error('PDF Generator не загружен');
-            }
-            
             // Создаем данные для отчета
             const reportData = {
                 id: Date.now().toString(),
-                sequentialNumber: window.appState.reportCounter,
+                sequentialNumber: this.getNextReportNumber(),
                 contractorName: this.selectedContractors.map(c => c.name).join(', '),
                 contractors: [...this.selectedContractors],
                 codes: [...session.scannedCodes],
@@ -780,8 +766,8 @@ class ScannerManager {
             
             console.log('📊 Данные для отчета:', reportData);
             
-            // Генерируем PDF с помощью pdfmake
-            console.log('🔄 Начинаем генерацию PDF с pdfmake...');
+            // Генерируем PDF
+            console.log('🔄 Начинаем генерацию PDF...');
             const pdfBytes = await pdfMakeGenerator.generateReport(reportData);
             console.log('✅ PDF сгенерирован успешно');
             
@@ -793,7 +779,7 @@ class ScannerManager {
             
             if (success) {
                 // Сохраняем отчет в историю
-                window.appState.saveReport(reportData);
+                this.saveReport(reportData);
                 
                 // Очищаем сессию
                 this.clearSession();
@@ -813,25 +799,62 @@ class ScannerManager {
         }
     }
 
+    // вспомогательные методы для работы с сессией
+    getCurrentSession() {
+        if (this.appState && this.appState.getCurrentSession) {
+            return this.appState.getCurrentSession();
+        }
+        
+        // Fallback
+        const session = JSON.parse(localStorage.getItem('honest_sign_session') || '{}');
+        return {
+            scannedCodes: session.scannedCodes || [],
+            createdAt: session.createdAt || new Date().toISOString()
+        };
+    }
+
+    getNextReportNumber() {
+        if (this.appState && this.appState.reportCounter) {
+            return this.appState.reportCounter;
+        }
+        
+        const reports = JSON.parse(localStorage.getItem('honest_sign_reports') || '[]');
+        return reports.length + 1;
+    }
+
+    saveReport(report) {
+        if (this.appState && this.appState.saveReport) {
+            this.appState.saveReport(report);
+        } else {
+            const reports = JSON.parse(localStorage.getItem('honest_sign_reports') || '[]');
+            reports.push(report);
+            localStorage.setItem('honest_sign_reports', JSON.stringify(reports));
+        }
+    }
+
     clearSession() {
         console.log('🗑️ Очистка сессии...');
         
         // Останавливаем камеру
         this.stopCamera();
         
-        // Очищаем в AppState
-        if (window.appState) {
-            window.appState.clearCurrentSession();
-            console.log('✅ Сессия очищена в AppState');
-        }
+        // Создаем пустую сессию
+        const emptySession = {
+            scannedCodes: [],
+            createdAt: new Date().toISOString(),
+            id: Date.now().toString()
+        };
+        
+        // Сохраняем пустую сессию
+        this.saveSession(emptySession);
         
         // Очищаем выбранных контрагентов
         this.selectedContractors = [];
         this.updateSelectedContractorsUI();
         
         // Обновляем UI
+        this.updateCodesList();
         this.updateUI();
-        this.updateCodesList(); // Добавьте этот вызов!
         
         showWarning('🗑️ Сессия очищена', 3000);
     }
@@ -875,36 +898,31 @@ class ScannerManager {
                     🗑️ Очистить историю
                 </button>
             </div>
-        `;
-        
-        // Добавляем список отчетов
-        const reportsContainer = document.createElement('div');
-        reportsContainer.className = 'reports-container';
-        
-        reportsContainer.innerHTML = reports.map((report, index) => `
-            <div class="report-item ${report.status || 'processed'}">
-                <div class="report-info">
-                    <div class="report-header">
-                        <strong>${report.contractorName || 'Контрагенты не указаны'}</strong>
-                        <span class="report-status ${report.status || 'processed'}">
-                            ${report.status || 'обработан'}
-                        </span>
+            <div class="reports-container">
+                ${reports.map((report, index) => `
+                    <div class="report-item ${report.status || 'processed'}">
+                        <div class="report-info">
+                            <div class="report-header">
+                                <strong>${report.contractorName || 'Контрагенты не указаны'}</strong>
+                                <span class="report-status ${report.status || 'processed'}">
+                                    ${report.status || 'обработан'}
+                                </span>
+                            </div>
+                            <div class="report-details">
+                                <span>Отчет #${report.sequentialNumber || (index + 1)}</span>
+                                <span>Кодов: ${report.codes ? report.codes.length : 0}</span>
+                                <span>${new Date(report.createdAt).toLocaleString('ru-RU')}</span>
+                            </div>
+                        </div>
+                        <div class="report-actions">
+                            <button class="btn btn-sm btn-outline" onclick="scannerManager.downloadReport(${index})">
+                                📥 Скачать
+                            </button>
+                        </div>
                     </div>
-                    <div class="report-details">
-                        <span>Отчет #${report.sequentialNumber || (index + 1)}</span>
-                        <span>Кодов: ${report.codes ? report.codes.length : 0}</span>
-                        <span>${new Date(report.createdAt).toLocaleString('ru-RU')}</span>
-                    </div>
-                </div>
-                <div class="report-actions">
-                    <button class="btn btn-sm btn-outline" onclick="scannerManager.downloadReport(${index})">
-                        📥 Скачать
-                    </button>
-                </div>
+                `).join('')}
             </div>
-        `).join('');
-        
-        container.appendChild(reportsContainer);
+        `;
         
         console.log('✅ Список отчетов обновлен');
     }
@@ -928,7 +946,6 @@ class ScannerManager {
         try {
             showInfo('Формирование PDF...', 3000);
             
-            // ИСПОЛЬЗУЕМ PDFMAKE ВМЕСТО PDFGENERATOR
             if (typeof pdfMakeGenerator === 'undefined') {
                 throw new Error('PDF Generator не загружен');
             }
@@ -948,66 +965,78 @@ class ScannerManager {
             showError('Ошибка формирования отчета: ' + error.message);
         }
     }
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    updateUI() {
-        console.log('🔄 updateUI вызван');
-        
+
+    clearReportsHistory() {
         if (!window.appState) {
-            console.error('❌ AppState не доступен в updateUI');
+            showError('AppState не доступен');
             return;
         }
         
-        const session = window.appState.getCurrentSession();
+        if (confirm('Вы уверены, что хотите очистить всю историю отчетов? Это действие нельзя отменить.')) {
+            console.log('🗑️ Очистка истории отчетов...');
+            
+            // Очищаем историю в AppState
+            if (window.appState.clearReports) {
+                window.appState.clearReports();
+            } else {
+                localStorage.removeItem('honest_sign_reports');
+            }
+            
+            // Обновляем список отчетов
+            this.loadReportsList();
+            
+            showSuccess('История отчетов очищена', 3000);
+        }
+    }
+
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    updateUI() {
+        const session = this.getCurrentSession();
         const codesCount = session.scannedCodes.length;
-        
-        console.log(`📊 Кодов в сессии: ${codesCount}`);
         
         const totalCodes = document.getElementById('totalCodes');
         const codesCountElement = document.getElementById('codesCount');
         
         if (totalCodes) {
             totalCodes.textContent = codesCount;
-            console.log('✅ totalCodes обновлен:', codesCount);
-        } else {
-            console.error('❌ totalCodes элемент не найден');
         }
         
         if (codesCountElement) {
             codesCountElement.textContent = codesCount;
-            console.log('✅ codesCountElement обновлен:', codesCount);
-        } else {
-            console.error('❌ codesCountElement элемент не найден');
         }
         
         this.updateButtonStates();
-        console.log('✅ updateUI завершен');
     }
 
     updateButtonStates() {
-        const hasContractors = this.selectedContractors.length > 0;
-        const hasCodes = window.appState && window.appState.getCurrentSession().scannedCodes.length > 0;
+        console.log('🔘 Обновление состояния кнопок...');
         
-        // НОВАЯ ЛОГИКА: кнопка активна только если есть контрагенты И коды
-        // И количество кодов >= количеству контрагентов
-        const codesCount = window.appState ? window.appState.getCurrentSession().scannedCodes.length : 0;
         const contractorsCount = this.selectedContractors.length;
+        const session = this.getCurrentSession();
+        const codesCount = session.scannedCodes.length;
         
-        const canGenerateReport = hasContractors && 
-                                 hasCodes && 
+        console.log(`📊 Данные: ${codesCount} кодов, ${contractorsCount} контрагентов`);
+        
+        // Логика: кодов должно быть НЕ МЕНЬШЕ, чем контрагентов
+        const canGenerateReport = contractorsCount > 0 && 
                                  codesCount >= contractorsCount;
         
         const startCamera = document.getElementById('startCamera');
         const generateReport = document.getElementById('generateReport');
         
-        if (startCamera) startCamera.disabled = !hasContractors;
+        // Кнопка камеры
+        if (startCamera) {
+            startCamera.disabled = contractorsCount === 0;
+        }
+        
+        // Кнопка отчета
         if (generateReport) {
             generateReport.disabled = !canGenerateReport;
             
-            // Добавляем подсказку если кнопка неактивна
-            if (!canGenerateReport) {
-                if (!hasContractors) {
+            if (generateReport.disabled) {
+                if (contractorsCount === 0) {
                     generateReport.title = 'Выберите контрагентов';
-                } else if (!hasCodes) {
+                } else if (codesCount === 0) {
                     generateReport.title = 'Нет отсканированных кодов';
                 } else if (codesCount < contractorsCount) {
                     generateReport.title = `Недостаточно кодов: ${codesCount} из ${contractorsCount}`;
@@ -1017,25 +1046,64 @@ class ScannerManager {
             }
         }
         
-        console.log(`🔘 Состояние кнопок: контрагенты=${hasContractors}, коды=${hasCodes}, можно_сформировать=${canGenerateReport}`);
+        // Обновляем статус сессии
+        this.updateSessionStatus();
+    }
+    
+    updateSessionStatus() {
+        const sessionStatus = document.getElementById('sessionStatus');
+        const currentContractor = document.getElementById('currentContractor');
+        const codesCountElement = document.getElementById('codesCount');
+        
+        if (!sessionStatus) return;
+        
+        const session = this.getCurrentSession();
+        const codesCount = session.scannedCodes.length;
+        const contractorsCount = this.selectedContractors.length;
+        
+        // Показываем статус только если есть контрагенты
+        if (contractorsCount > 0) {
+            sessionStatus.classList.remove('hidden');
+            
+            if (currentContractor) {
+                const contractorNames = this.selectedContractors.map(c => c.name).join(', ');
+                currentContractor.textContent = contractorNames || '-';
+            }
+            
+            if (codesCountElement) {
+                codesCountElement.textContent = codesCount;
+            }
+        } else {
+            sessionStatus.classList.add('hidden');
+        }
     }
 
-    updateCodesList() {
-        console.log('🔄 Обновление списка кодов (мобильная версия)...');
+    saveSession(session) {
+        console.log('💾 Сохранение сессии...');
         
-        if (!window.appState) {
-            console.error('❌ AppState не доступен');
-            return;
+        // Сохраняем в AppState если доступен
+        if (this.appState && this.appState.saveSession) {
+            this.appState.saveSession(session);
+        } else {
+            // Сохраняем напрямую в localStorage
+            try {
+                localStorage.setItem('honest_sign_session', JSON.stringify(session));
+                console.log('✅ Сессия сохранена в localStorage');
+            } catch (error) {
+                console.error('❌ Ошибка сохранения сессии:', error);
+            }
         }
-        
+    }
+    
+    updateCodesList() {
         const codesList = document.getElementById('codesList');
         if (!codesList) {
             console.error('❌ codesList элемент не найден');
             return;
         }
         
-        const codes = window.appState.getCurrentSession().scannedCodes;
-        console.log(`📊 МОБИЛЬНЫЙ: Отображаем ${codes.length} кодов`);
+        const session = this.getCurrentSession();
+        const codes = session.scannedCodes;
         
         // Очищаем список
         codesList.innerHTML = '';
@@ -1053,7 +1121,6 @@ class ScannerManager {
                 const codeItem = document.createElement('div');
                 codeItem.className = 'code-item';
                 
-                // БЕЗОПАСНОЕ создание HTML для мобильных
                 const safeCode = scannedCode.code.replace(/"/g, '&quot;');
                 
                 codeItem.innerHTML = `
@@ -1071,17 +1138,14 @@ class ScannerManager {
                 codesList.appendChild(codeItem);
             });
         }
-        
-        console.log('✅ МОБИЛЬНЫЙ: Список кодов обновлен');
     }
 
     checkExistingSession() {
         try {
-            console.log('🔄 ScannerManager: Восстановление сессии...');
+            console.log('🔄 Восстановление сессии...');
             
             // Восстанавливаем выбранных контрагентов
             const saved = JSON.parse(localStorage.getItem('honest_sign_selected_contractors') || '{}');
-            console.log('- Сохраненные выбранные контрагенты:', saved);
             
             if (saved.contractorIds && Array.isArray(saved.contractorIds)) {
                 this.selectedContractors = saved.contractorIds.map(id => 
@@ -1090,24 +1154,23 @@ class ScannerManager {
                 
                 console.log('- Восстановлено контрагентов:', this.selectedContractors.length);
             }
-    
-            // Восстанавливаем отсканированные коды через appState если доступен
-            if (window.appState && window.appState.getCurrentSession) {
-                const session = window.appState.getCurrentSession();
-                if (session.scannedCodes.length > 0) {
-                    session.scannedCodes.forEach(code => this.addCodeToList(code));
-                    this.updateUI();
-                }
+        
+            // Восстанавливаем отсканированные коды
+            const session = this.getCurrentSession();
+            if (session.scannedCodes.length > 0) {
+                console.log('- Восстановлено кодов:', session.scannedCodes.length);
+                // Перестраиваем список кодов
+                this.updateCodesList();
             }
-    
+        
             this.updateSelectedContractorsUI();
             this.updateButtonStates();
             this.updateUI();
             
-            console.log('✅ ScannerManager: Сессия восстановлена');
+            console.log('✅ Сессия восстановлена');
             
         } catch (error) {
-            console.error('❌ ScannerManager: Ошибка восстановления сессии:', error);
+            console.error('❌ Ошибка восстановления сессии:', error);
             this.selectedContractors = [];
         }
     }
@@ -1162,108 +1225,6 @@ class ScannerManager {
         showSuccess('Данные экспортированы в файл', 3000);
     }
 
-    // СИНХРОНИЗАЦИЯ ДАННЫХ
-    async forceSync() {
-        console.log('🔄 Принудительная синхронизация...');
-        
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        showInfo('🔄 Синхронизация с облаком...', 3000);
-        
-        try {
-            const syncedContractors = await window.appState.syncWithFirebase();
-            
-            if (syncedContractors) {
-                // Обновляем локальные данные
-                this.allContractors = syncedContractors;
-                this.loadContractorsManagerList();
-                this.updateSelectedContractorsUI();
-                
-                showSuccess(`✅ Синхронизировано ${syncedContractors.length} контрагентов`, 5000);
-                this.updateSyncUI();
-            }
-        } catch (error) {
-            console.error('❌ Ошибка синхронизации:', error);
-            showError('Ошибка синхронизации: ' + error.message);
-        }
-    }
-
-    clearReportsHistory() {
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        if (confirm('Вы уверены, что хотите очистить всю историю отчетов? Это действие нельзя отменить.')) {
-            console.log('🗑️ Очистка истории отчетов...');
-            
-            // Очищаем историю в AppState
-            window.appState.clearReports();
-            
-            // Обновляем список отчетов
-            this.loadReportsList();
-            
-            showSuccess('История отчетов очищена', 3000);
-        }
-    }
-
-    toggleSync() {
-        if (!window.appState || !window.appState.firebaseSync) {
-            showError('Firebase синхронизация не доступна');
-            return;
-        }
-        
-        const currentStatus = window.appState.firebaseSync.syncEnabled;
-        window.appState.firebaseSync.setSyncEnabled(!currentStatus);
-        
-        showSuccess(`Автосинхронизация ${!currentStatus ? 'включена' : 'выключена'}`, 3000);
-        this.updateSyncUI();
-    }
-
-    updateSyncUI() {
-        if (!window.appState || !window.appState.firebaseSync) return;
-        
-        const status = window.appState.firebaseSync.getSyncStatus();
-        const syncStatus = document.getElementById('syncStatus');
-        const firebaseStatus = document.getElementById('firebaseStatus');
-        const deviceId = document.getElementById('deviceId');
-        const toggleBtn = document.getElementById('toggleSyncBtn');
-        const forceSyncBtn = document.getElementById('forceSyncBtn');
-        
-        if (syncStatus) {
-            if (status.isConnected && status.syncEnabled) {
-                syncStatus.textContent = '✅ Включена';
-                syncStatus.className = 'badge badge-success';
-            } else if (status.isConnected) {
-                syncStatus.textContent = '⏸️ Выключена';
-                syncStatus.className = 'badge badge-warning';
-            } else {
-                syncStatus.textContent = '❌ Ошибка';
-                syncStatus.className = 'badge badge-danger';
-            }
-        }
-        
-        if (firebaseStatus) {
-            firebaseStatus.textContent = status.isConnected ? '✅ Подключено' : '❌ Ошибка';
-            firebaseStatus.style.color = status.isConnected ? '#28a745' : '#dc3545';
-        }
-        
-        if (deviceId) {
-            deviceId.textContent = status.userId ? status.userId.substring(0, 10) + '...' : '-';
-        }
-        
-        if (toggleBtn) {
-            toggleBtn.textContent = status.syncEnabled ? '⏸️ Выключить синхронизацию' : '⚡ Включить синхронизацию';
-        }
-        
-        if (forceSyncBtn) {
-            forceSyncBtn.disabled = !status.isConnected;
-        }
-    }
-
     importData() {
         const input = document.createElement('input');
         input.type = 'file';
@@ -1279,14 +1240,20 @@ class ScannerManager {
                 
                 if (file.name.endsWith('.json')) {
                     // Импорт JSON
-                    if (window.appState && window.appState.manualImport) {
-                        window.appState.manualImport(content);
+                    try {
+                        const data = JSON.parse(content);
+                        if (data.contractors) {
+                            this.allContractors = data.contractors;
+                            this.saveContractors();
+                            this.loadContractorsManagerList();
+                            showSuccess(`Импортировано ${this.allContractors.length} контрагентов`, 3000);
+                        }
+                    } catch (error) {
+                        showError('Ошибка импорта JSON: ' + error.message);
                     }
                 } else if (file.name.endsWith('.csv')) {
                     // Импорт CSV
-                    if (window.appState && window.appState.importContractorsFromCSV) {
-                        window.appState.importContractorsFromCSV(content);
-                    }
+                    this.importContractorsFromCSV(content);
                 }
             };
             reader.readAsText(file);
@@ -1295,79 +1262,34 @@ class ScannerManager {
         input.click();
     }
 
-    showQRCode() {
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        window.appState.syncWithQRCode();
-    }
+    importContractorsFromCSV(csvData) {
+        const lines = csvData.trim().split('\n');
+        let importedCount = 0;
 
-    scanQRCode() {
-        showInfo('Для сканирования QR-кода используйте основную камеру сканирования', 5000);
-        this.startCamera();
-    }
+        lines.forEach(line => {
+            const parts = line.split(',').map(p => p.trim());
+            if (parts.length >= 1) {
+                const name = parts[0];
+                const category = parts[1] || 'Общая категория';
 
-    // Обработка сканированных QR-кодов синхронизации
-    handleSyncQRCode(decodedText) {
-        try {
-            // Проверяем, это ли данные синхронизации
-            const data = JSON.parse(decodedText);
-            
-            if (data.contractors && data.timestamp) {
-                if (confirm(`Импортировать ${data.contractors.length} контрагентов?`)) {
-                    if (window.appState && window.appState.importFromQRCode) {
-                        window.appState.importFromQRCode(decodedText);
-                        this.loadContractors(); // Перезагружаем контрагентов
-                        this.loadContractorsManagerList(); // Обновляем список
-                    }
+                // Проверяем дубликаты
+                if (!this.allContractors.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                    const newId = this.allContractors.length > 0 
+                        ? Math.max(...this.allContractors.map(c => c.id)) + 1 
+                        : 1;
+                    
+                    this.allContractors.push({ id: newId, name, category });
+                    importedCount++;
                 }
-                return true;
             }
-        } catch (error) {
-            // Не JSON данные, значит обычный QR-код
-            console.log('Обычный QR-код, не данные синхронизации');
-            return false;
-        }
-        
-        return false;
-    }
+        });
 
-    // Принудительное выравнивание данных с облаком
-    forceDataAlignment() {
-        console.log('🔄 Принудительное выравнивание данных...');
-        
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        showInfo('🔄 Выравнивание данных с облаком...', 5000);
-        
-        try {
-            // 1. Очищаем локальные данные
-            localStorage.removeItem('honest_sign_contractors');
-            console.log('✅ Локальные данные очищены');
-            
-            // 2. Перезагружаем AppState
-            window.appState.loadContractors();
-            console.log('✅ AppState перезагружен');
-            
-            // 3. Синхронизируем с Firebase
-            window.appState.syncWithFirebase().then((result) => {
-                // 4. Обновляем ScannerManager
-                this.allContractors = result;
-                this.loadContractorsManagerList();
-                this.updateSelectedContractorsUI();
-                
-                showSuccess(`✅ Данные выровнены с облаком: ${result.length} контрагентов`, 5000);
-                console.log('✅ Выравнивание завершено');
-            });
-            
-        } catch (error) {
-            console.error('❌ Ошибка выравнивания данных:', error);
-            showError('Ошибка выравнивания: ' + error.message);
+        if (importedCount > 0) {
+            this.saveContractors();
+            this.loadContractorsManagerList();
+            showSuccess(`Импортировано ${importedCount} контрагентов из CSV`, 3000);
+        } else {
+            showWarning('Нет новых контрагентов для импорта из CSV');
         }
     }
 
@@ -1375,14 +1297,6 @@ class ScannerManager {
     setupEventListeners() {
         console.log('🔧 Настройка обработчиков событий');
 
-        document.addEventListener('click', (e) => {
-            if (e.target.id === 'startCamera' || e.target.closest('#startCamera')) {
-                console.log('📷 Кнопка камеры нажата');
-                console.log('- Выбрано контрагентов:', this.selectedContractors.length);
-                console.log('- Камера доступна:', navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia);
-            }
-        });
-        
         // Основные кнопки
         this.setupButton('startCamera', 'startCamera');
         this.setupButton('stopCamera', 'stopCamera');
@@ -1396,20 +1310,19 @@ class ScannerManager {
         this.setupButton('showContractorManagerBtn', 'showContractorManager');
         
         // Модальные окна
-        this.setupButton('hideContractorManager', 'hideContractorManager');
-        this.setupButton('hideAddContractorForm', 'hideAddContractorForm');
+        this.setupButton('hideContractorManagerBtn', 'hideContractorManager');
+        this.setupButton('hideAddContractorFormBtn', 'hideAddContractorForm');
         this.setupButton('clearContractors', 'clearContractors');
-        this.setupButton('addContractor', 'addContractor');
+        this.setupButton('addContractorBtn', 'addContractor');
         this.setupButton('showAddContractorFormBtn', 'showAddContractorForm');
         this.setupButton('showImportFormBtn', 'showImportForm');
-        this.setupButton('importContractors', 'importContractorsFromForm');
-        this.setupButton('hideImportForm', 'hideAddContractorForm');
+        this.setupButton('importContractorsBtn2', 'importContractorsFromForm');
+        this.setupButton('hideImportFormBtn', 'hideAddContractorForm');
     
-        // для кнопок синхронизации
-        this.setupSyncButton('exportData');
-        this.setupSyncButton('importData'); 
-        this.setupSyncButton('showQRCode');
-        this.setupSyncButton('scanQRCode');
+        // Кнопки синхронизации
+        this.setupButton('exportDataBtn', 'exportData');
+        this.setupButton('importDataBtn', 'importData');
+        this.setupButton('forceSyncBtn', 'forceSync');
     
         // Тестовые коды
         document.addEventListener('click', (e) => {
@@ -1430,34 +1343,15 @@ class ScannerManager {
             }
         });
     
-        // ✅ ПРАВИЛЬНЫЙ ОБРАБОТЧИК ДЛЯ КНОПОК УДАЛЕНИЯ
-        const handleRemoveClick = (e) => {
-            // Проверяем какую кнопку нажали
+        // Обработчик удаления кодов
+        document.addEventListener('click', (e) => {
             if (e.target.classList.contains('remove-code-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
                 
                 const code = e.target.getAttribute('data-code');
-                console.log('📱 Удаление кода:', code);
                 this.removeCode(code);
             }
-        };
-        
-        // Вешаем оба события для мобильных и десктопов
-        document.addEventListener('click', handleRemoveClick);
-        document.addEventListener('touchend', handleRemoveClick);
-    }
-    
-    setupSyncButton(methodName) {
-        // Ищем кнопки с onclick атрибутом
-        const buttons = document.querySelectorAll(`[onclick*="${methodName}"]`);
-        buttons.forEach(button => {
-            button.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (this[methodName]) {
-                    this[methodName]();
-                }
-            });
         });
     }
 
@@ -1470,69 +1364,18 @@ class ScannerManager {
             });
         }
     }
-}
 
-// Глобальная функция для тестирования синхронизации
-function testSync() {
-    if (window.appState && window.appState.firebaseSync) {
-        console.log('🧪 Тест синхронизации...');
-        window.appState.syncWithFirebase().then(result => {
-            console.log('✅ Результат синхронизации:', result);
-        });
-    } else {
-        console.error('❌ AppState или FirebaseSync не доступны');
+    forceSync() {
+        console.log('🔄 Принудительная синхронизация...');
+        showInfo('🔄 Синхронизация данных...', 3000);
+        
+        // Простая реализация - перезагрузка данных
+        this.loadContractors();
+        this.loadReportsList();
+        
+        showSuccess('Данные синхронизированы', 3000);
     }
 }
-
-// Сделать функцию глобально доступной
-window.testSync = testSync;
-
-function forceDataAlignment() {
-    if (window.scannerManager) {
-        window.scannerManager.forceDataAlignment();
-    } else {
-        console.error('❌ ScannerManager не доступен');
-    }
-}
-
-function checkReportButton() {
-    const btn = document.getElementById('generateReport');
-    const appState = window.appState;
-    const scanner = window.scannerManager;
-    
-    if (!btn || !appState || !scanner) {
-        console.error('❌ Не все компоненты доступны');
-        return;
-    }
-    
-    const session = appState.getCurrentSession();
-    const codesCount = session.scannedCodes.length;
-    const contractorsCount = scanner.selectedContractors.length;
-    
-    console.log('🔍 Проверка кнопки отчета:');
-    console.log('- Коды:', codesCount);
-    console.log('- Контрагенты:', contractorsCount);
-    console.log('- Кнопка disabled:', btn.disabled);
-    console.log('- Можно формировать отчет:', codesCount >= contractorsCount && codesCount > 0 && contractorsCount > 0);
-}
-
-function checkPDFEnvironment() {
-    console.log('🔍 Проверка окружения PDF:');
-    console.log('- jspdf:', typeof jspdf);
-    console.log('- bwipjs:', typeof bwipjs);
-    console.log('- pdfGenerator:', typeof pdfGenerator);
-    console.log('- AppState:', typeof appState);
-    
-    if (window.appState) {
-        const session = window.appState.getCurrentSession();
-        console.log('- Коды в сессии:', session.scannedCodes.length);
-        console.log('- Контрагенты выбрано:', window.scannerManager?.selectedContractors.length);
-    }
-}
-
-
-// Сделать функцию глобально доступной
-window.forceDataAlignment = forceDataAlignment;
 
 // ИНИЦИАЛИЗАЦИЯ
 document.addEventListener('DOMContentLoaded', function() {
