@@ -361,5 +361,56 @@
             }, 1000);
         });
     </script>
+
+<script>
+    // Код для отладки кнопок управления контрагентами
+    document.addEventListener('DOMContentLoaded', function() {
+        // Проверяем все кнопки управления контрагентами
+        const contractorButtons = [
+            'addManualContractorBtn',
+            'importContractorsBtn',
+            'showContractorManagerBtn',
+            'clearContractors',
+            'hideContractorManagerBtn',
+            'hideAddContractorFormBtn',
+            'addContractorBtn',
+            'importContractorsBtn2',
+            'hideImportFormBtn',
+            'showAddContractorFormBtn',
+            'showImportFormBtn'
+        ];
+        
+        // Проверяем, какие кнопки существуют в DOM
+        setTimeout(() => {
+            console.log('🔍 Проверка кнопок управления контрагентами:');
+            contractorButtons.forEach(btnId => {
+                const btn = document.getElementById(btnId);
+                console.log(`${btn ? '✅' : '❌'} ${btnId}: ${btn ? 'найдена' : 'не найдена'}`);
+            });
+            
+            // Проверяем модальные окна
+            console.log('🔍 Проверка модальных окон:');
+            const contractorManager = document.getElementById('contractorManager');
+            console.log(`Менеджер контрагентов: ${contractorManager ? 'найден' : 'не найден'}`);
+            
+            // Если ScannerManager еще не инициализирован, показываем сообщение
+            if (!window.scannerManager) {
+                console.warn('⚠️ ScannerManager еще не инициализирован');
+                const scannerSection = document.querySelector('#scannerSection');
+                if (scannerSection) {
+                    scannerSection.innerHTML = `
+                        <div class="alert alert-warning">
+                            <h4>Ожидание инициализации</h4>
+                            <p>ScannerManager загружается...</p>
+                            <button onclick="location.reload()" class="btn btn-sm btn-primary">
+                                Обновить страницу
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+        }, 1000);
+    });
+    </script>
 </body>
 </html>
