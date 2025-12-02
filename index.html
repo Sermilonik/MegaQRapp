@@ -207,10 +207,21 @@
             
             <div id="syncInfo" style="margin-top: 15px; font-size: 12px; color: #666;">
                 <div>📱 ID устройства: <span id="deviceId">-</span></div>
-                <div>🔗 User ID: <span id="userId">-</span></div>
+                <div>👤 Firebase User ID: <span id="userId">-</span></div>
+                <div>👥 Всего пользователей: <span id="usersCount">-</span></div>
                 <div>🕐 Последняя синхронизация: <span id="lastSync">-</span></div>
                 <div>📊 Статус: <span id="firebaseStatus">-</span></div>
                 <div>📁 Путь: <span id="firebasePath">-</span></div>
+            </div>
+            
+            <!-- новые кнопки управления: -->
+            <div class="sync-management" style="margin-top: 15px;">
+                <button class="btn btn-info btn-sm" id="showUsersBtn">
+                    👥 Показать всех пользователей
+                </button>
+                <button class="btn btn-warning btn-sm" id="clearFirebaseIdBtn">
+                    🔄 Сбросить Firebase ID
+                </button>
             </div>
         </div>
     
