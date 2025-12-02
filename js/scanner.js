@@ -30,33 +30,17 @@ class ScannerManager {
 
     async init() {
         console.log('🔧 Инициализация ScannerManager');
-
-            // Ждем инициализации AppState если нужно
-    if (!this.appState || !this.appState.isInitialized) {
-        console.log('⏳ Ожидаем инициализацию AppState...');
-        await new Promise(resolve => {
-            const checkInterval = setInterval(() => {
-                if (window.appState && window.appState.isInitialized) {
-                    clearInterval(checkInterval);
-                    this.appState = window.appState;
-                    console.log('✅ AppState готов');
-                    resolve();
-                }
-            }, 100);
-            
-            // Таймаут
-            setTimeout(() => {
-                clearInterval(checkInterval);
-                console.log('⚠️ Таймаут ожидания AppState');
-                resolve();
-            }, 5000);
-        });
-    }
         
-        // Проверяем APK режим
+        // Ждем инициализации AppState если нужно
+        await this.waitForAppState();
+        
+        // Оптимизация для APK
         this.optimizeForAPK();
         
-        // Загружаем контрагентов
+        // Проверяем и применяем удаленные контрагенты
+        await this.checkAndApplyDeleted();
+        
+        // Загружаем контрагентов (уже отфильтрованных)
         this.loadContractors();
         
         // Восстанавливаем сессию
@@ -71,23 +55,63 @@ class ScannerManager {
         // Загружаем отчеты
         this.loadReportsList();
         
-        // Обновляем UI синхронизации (с задержкой чтобы Firebase успел инициализироваться)
-        setTimeout(() => {
-            this.updateSyncUI();
-            console.log('🔄 UI синхронизации обновлен');
-        }, 3000);
+        // Обновляем UI
+        this.updateUI();
         
-        // Периодическое обновление статуса синхронизации
-        setInterval(() => {
-            this.updateSyncUI();
-            console.log('🔄 Периодическое обновление статуса синхронизации');
-        }, 30000); // каждые 30 секунд
-        
-        // Также обновляем статус синхронизации при изменении данных
+        // Настраиваем синхронизацию
         this.setupSyncDataListeners();
+        this.updateSyncUI();
         
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
+    }
+    
+    async checkAndApplyDeleted() {
+        try {
+            console.log('🔍 Проверка удаленных контрагентов...');
+            
+            // Получаем список удаленных
+            const deletedData = localStorage.getItem('honest_sign_deleted_contractors');
+            if (!deletedData) {
+                console.log('ℹ️ Нет данных об удаленных контрагентах');
+                return;
+            }
+            
+            const deletedContractors = JSON.parse(deletedData);
+            if (!Array.isArray(deletedContractors) || deletedContractors.length === 0) {
+                console.log('ℹ️ Список удаленных контрагентов пуст');
+                return;
+            }
+            
+            console.log(`📊 Найдено ${deletedContractors.length} удаленных контрагентов в локальном кэше`);
+            
+            // Применяем удаление к текущим данным
+            if (this.appState && this.appState.getAllContractors) {
+                const allContractors = this.appState.getAllContractors();
+                const deletedIds = new Set(deletedContractors.map(d => d.id));
+                
+                const filtered = allContractors.filter(contractor => !deletedIds.has(contractor.id));
+                
+                const removedCount = allContractors.length - filtered.length;
+                if (removedCount > 0) {
+                    console.log(`🗑️ Применено удаление ${removedCount} контрагентов из локального кэша`);
+                    
+                    // Обновляем AppState
+                    this.appState.contractors = filtered;
+                    this.appState.saveContractors();
+                    
+                    // Показываем уведомление
+                    if (removedCount > 0) {
+                        setTimeout(() => {
+                            showInfo(`Удалено ${removedCount} контрагентов (из локального кэша удаленных)`, 4000);
+                        }, 2000);
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка проверки удаленных контрагентов:', error);
+        }
     }
 
     setupSyncDataListeners() {
@@ -174,8 +198,14 @@ class ScannerManager {
         console.log('🔍 Загрузка контрагентов');
         
         if (this.appState && this.appState.getAllContractors) {
-            this.allContractors = this.appState.getAllContractors();
-            console.log(`✅ Загружено ${this.allContractors.length} контрагентов из AppState`);
+            // Получаем всех контрагентов из AppState
+            const allContractors = this.appState.getAllContractors();
+            
+            // Фильтруем удаленных из localStorage
+            const filteredContractors = this.filterDeletedContractors(allContractors);
+            
+            this.allContractors = filteredContractors;
+            console.log(`✅ Загружено ${this.allContractors.length} контрагентов (отфильтровано удаленных)`);
         } else {
             console.warn('⚠️ AppState не доступен, загружаем напрямую');
             this.loadContractorsDirectly();
@@ -183,6 +213,37 @@ class ScannerManager {
         
         this.initContractorSearch();
     }
+
+    // фильтр удаленных контрагентов
+    filterDeletedContractors(contractors) {
+        try {
+            // Получаем список удаленных из localStorage
+            const deletedData = localStorage.getItem('honest_sign_deleted_contractors');
+            if (!deletedData) {
+                return contractors;
+            }
+            
+            const deletedContractors = JSON.parse(deletedData);
+            if (!Array.isArray(deletedContractors) || deletedContractors.length === 0) {
+                return contractors;
+            }
+            
+            const deletedIds = new Set(deletedContractors.map(d => d.id));
+            const filtered = contractors.filter(contractor => !deletedIds.has(contractor.id));
+            
+            const removedCount = contractors.length - filtered.length;
+            if (removedCount > 0) {
+                console.log(`🗑️ Отфильтровано ${removedCount} удаленных контрагентов`);
+            }
+            
+            return filtered;
+            
+        } catch (error) {
+            console.error('❌ Ошибка фильтрации удаленных контрагентов:', error);
+            return contractors;
+        }
+    }
+    
 
     loadContractorsDirectly() {
         try {
@@ -668,12 +729,12 @@ class ScannerManager {
     }
 
     deleteContractor(contractorId) {
-        if (!confirm('Удалить этого контрагента?')) return;
+        if (!confirm('Удалить этого контрагента на всех устройствах?')) return;
         
         const contractor = this.allContractors.find(c => c.id === contractorId);
         if (!contractor) return;
         
-        console.log(`🗑️ Удаление контрагента: ${contractor.name}`);
+        console.log(`🗑️ Удаление контрагента на всех устройствах: ${contractor.name}`);
         
         // Удаляем из локальных списков
         this.allContractors = this.allContractors.filter(c => c.id !== contractorId);
@@ -686,25 +747,73 @@ class ScannerManager {
         this.updateSelectedContractorsUI();
         this.loadContractorsManagerList();
         
-        // Пометка как удаленного в Firebase
+        // Пометка как удаленного в Firebase и локально
         if (window.appState && window.appState.firebaseSync) {
+            // 1. Помечаем как удаленного в Firebase
             window.appState.firebaseSync.markContractorAsDeleted(contractor)
                 .then(success => {
                     if (success) {
                         console.log(`✅ Контрагент "${contractor.name}" помечен как удаленный в облаке`);
-                    } else {
-                        console.log(`⚠️ Не удалось пометить контрагента как удаленного в облаке`);
+                        
+                        // 2. Добавляем в локальный список удаленных
+                        this.addToLocalDeleted(contractor);
+                        
+                        // 3. Принудительная синхронизация для немедленного применения
+                        setTimeout(() => {
+                            this.forceSync();
+                        }, 1000);
                     }
                 })
                 .catch(error => {
                     console.error('❌ Ошибка пометки удаленного контрагента:', error);
+                    // Все равно добавляем локально
+                    this.addToLocalDeleted(contractor);
                 });
+        } else {
+            // Если Firebase не доступен, добавляем только локально
+            this.addToLocalDeleted(contractor);
         }
         
-        showWarning(`Контрагент "${contractor.name}" удален`, 3000);
+        showWarning(`Контрагент "${contractor.name}" удален. Изменения будут синхронизированы с другими устройствами.`, 4000);
+    }
+
+    addToLocalDeleted(contractor) {
+        try {
+            // Получаем текущий список удаленных
+            const deletedData = localStorage.getItem('honest_sign_deleted_contractors');
+            let deletedContractors = [];
+            
+            if (deletedData) {
+                deletedContractors = JSON.parse(deletedData);
+            }
+            
+            // Проверяем, нет ли уже этого контрагента в списке
+            const exists = deletedContractors.some(c => c.id === contractor.id);
+            if (!exists) {
+                // Добавляем с метаданными
+                deletedContractors.push({
+                    ...contractor,
+                    deletedAt: new Date().toISOString(),
+                    deletedBy: window.appState ? window.appState.deviceId : 'unknown',
+                    deletedReason: 'user_deleted',
+                    localDelete: true
+                });
+                
+                // Сохраняем обновленный список
+                localStorage.setItem('honest_sign_deleted_contractors', JSON.stringify(deletedContractors));
+                
+                console.log(`✅ Контрагент "${contractor.name}" добавлен в локальный список удаленных`);
+                
+                // Обновляем UI удаленных
+                this.updateDeletedUI(deletedContractors);
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка добавления в локальный список удаленных:', error);
+        }
     }
     
-    // Добавьте метод для очистки удаленных контрагентов:
+    // Метод для очистки удаленных контрагентов:
     async clearDeletedContractors() {
         if (!window.appState || !window.appState.firebaseSync) {
             showError('FirebaseSync не доступен');
@@ -727,6 +836,57 @@ class ScannerManager {
             
         } catch (error) {
             console.error('❌ Ошибка очистки удаленных контрагентов:', error);
+            showError('Ошибка: ' + error.message);
+        }
+    }
+
+    // принудительное удаление
+    async applyDeletedNow() {
+        if (!confirm('Принудительно применить все удаленные контрагенты?\n\nЭто удалит все контрагенты, помеченные как удаленные на других устройствах.')) {
+            return;
+        }
+        
+        try {
+            showInfo('🗑️ Применение удаленных контрагентов...', 3000);
+            
+            // 1. Получаем список удаленных
+            const deletedData = localStorage.getItem('honest_sign_deleted_contractors');
+            if (!deletedData) {
+                showWarning('Нет данных об удаленных контрагентах');
+                return;
+            }
+            
+            const deletedContractors = JSON.parse(deletedData);
+            if (!Array.isArray(deletedContractors) || deletedContractors.length === 0) {
+                showWarning('Список удаленных контрагентов пуст');
+                return;
+            }
+            
+            // 2. Фильтруем локальные контрагенты
+            if (this.appState && this.appState.getAllContractors) {
+                const allContractors = this.appState.getAllContractors();
+                const deletedIds = new Set(deletedContractors.map(d => d.id));
+                
+                const filtered = allContractors.filter(contractor => !deletedIds.has(contractor.id));
+                
+                const removedCount = allContractors.length - filtered.length;
+                if (removedCount > 0) {
+                    // 3. Обновляем AppState
+                    this.appState.contractors = filtered;
+                    this.appState.saveContractors();
+                    
+                    // 4. Обновляем UI
+                    this.loadContractors();
+                    this.loadContractorsManagerList();
+                    
+                    showSuccess(`Удалено ${removedCount} контрагентов`, 3000);
+                } else {
+                    showWarning('Нет контрагентов для удаления', 3000);
+                }
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка применения удаленных:', error);
             showError('Ошибка: ' + error.message);
         }
     }
@@ -1239,7 +1399,7 @@ class ScannerManager {
     }
 
     async forceSync() {
-        console.log('🔄 Принудительная синхронизация...');
+        console.log('🔄 Принудительная синхронизация с удалением...');
         
         if (!window.appState) {
             showError('AppState не доступен');
@@ -1251,10 +1411,10 @@ class ScannerManager {
             return;
         }
         
-        showInfo('🔄 Синхронизация с облаком...', 5000);
+        showInfo('🔄 Синхронизация с автоматическим удалением...', 5000);
         
         try {
-            // Используем метод forceSync из FirebaseSync
+            // Используем улучшенный метод forceSync из FirebaseSync
             const success = await window.appState.firebaseSync.forceSync();
             
             if (success) {
@@ -1263,9 +1423,14 @@ class ScannerManager {
                 this.loadReportsList();
                 this.updateSyncUI();
                 
-                // Показываем статистику
+                // Получаем статистику
                 const status = window.appState.getSyncStatus();
-                showSuccess(`✅ Синхронизация завершена: ${status.contractorsCount} контрагентов, ${status.reportsCount} отчетов`, 3000);
+                
+                // Получаем количество удаленных
+                const deletedData = localStorage.getItem('honest_sign_deleted_contractors');
+                const deletedCount = deletedData ? JSON.parse(deletedData).length : 0;
+                
+                showSuccess(`✅ Синхронизация завершена: ${status.contractorsCount} контрагентов, ${deletedCount} удаленных`, 3000);
             } else {
                 showWarning('⚠️ Синхронизация не выполнена', 3000);
             }
@@ -1810,6 +1975,7 @@ class ScannerManager {
         this.setupButton('syncDeletedBtn', 'syncDeletedContractors');
         this.setupButton('clearDeletedBtn', 'clearDeletedContractorsList');
         this.setupButton('showDeletedBtn', 'showDeletedContractors');
+        this.setupButton('applyDeletedBtn', 'applyDeletedNow');
 
         // Модальные окна
         this.setupButton('hideContractorManagerBtn', 'hideContractorManager');
