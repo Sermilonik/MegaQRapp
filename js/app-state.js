@@ -294,6 +294,26 @@ class AppState {
             return false;
         }
     }
+
+    // Удаление контрагентов
+    saveDeletedContractorsLocally(deletedContractors) {
+        try {
+            localStorage.setItem('honest_sign_deleted_contractors', JSON.stringify(deletedContractors));
+            console.log(`💾 Сохранено ${deletedContractors.length} удаленных контрагентов локально`);
+        } catch (error) {
+            console.error('❌ Ошибка сохранения удаленных контрагентов:', error);
+        }
+    }
+    
+    loadDeletedContractors() {
+        try {
+            const saved = localStorage.getItem('honest_sign_deleted_contractors');
+            return saved ? JSON.parse(saved) : [];
+        } catch (error) {
+            console.error('❌ Ошибка загрузки удаленных контрагентов:', error);
+            return [];
+        }
+    }
     
     // Сессия
     getCurrentSession() {
