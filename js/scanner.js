@@ -917,24 +917,24 @@ class ScannerManager {
             }
             
             const status = window.appState.getSyncStatus();
-            const lastSync = localStorage.getItem('honest_sign_last_sync');
+            const syncStatus = window.appState.firebaseSync ? 
+                window.appState.firebaseSync.getStatus() : null;
             
             // Обновляем элементы UI
             const elements = {
                 syncStatus: document.getElementById('syncStatus'),
                 deviceId: document.getElementById('deviceId'),
+                userId: document.getElementById('userId'),
                 lastSync: document.getElementById('lastSync'),
-                firebaseStatus: document.getElementById('firebaseStatus')
+                firebaseStatus: document.getElementById('firebaseStatus'),
+                firebasePath: document.getElementById('firebasePath')
             };
             
             // Статус синхронизации
             if (elements.syncStatus) {
-                if (status.isConnected && status.syncEnabled) {
+                if (status.isConnected) {
                     elements.syncStatus.textContent = '✅ Включена';
                     elements.syncStatus.className = 'badge badge-success';
-                } else if (status.isConnected) {
-                    elements.syncStatus.textContent = '⏸️ Выключена';
-                    elements.syncStatus.className = 'badge badge-warning';
                 } else {
                     elements.syncStatus.textContent = '❌ Ошибка';
                     elements.syncStatus.className = 'badge badge-danger';
@@ -944,14 +944,21 @@ class ScannerManager {
             // ID устройства
             if (elements.deviceId) {
                 elements.deviceId.textContent = status.deviceId ? 
-                    status.deviceId.substring(0, 10) + '...' : 
+                    status.deviceId.substring(0, 15) + '...' : 
+                    'не задан';
+            }
+            
+            // User ID
+            if (elements.userId && syncStatus) {
+                elements.userId.textContent = syncStatus.userId ? 
+                    syncStatus.userId.substring(0, 10) + '...' : 
                     'не задан';
             }
             
             // Последняя синхронизация
             if (elements.lastSync) {
-                if (lastSync) {
-                    const date = new Date(lastSync);
+                if (status.lastSync) {
+                    const date = new Date(status.lastSync);
                     elements.lastSync.textContent = 
                         date.toLocaleDateString() + ' ' + date.toLocaleTimeString().substring(0, 5);
                 } else {
@@ -970,14 +977,15 @@ class ScannerManager {
                 }
             }
             
-            console.log('🔄 UI синхронизации обновлен:', {
-                connected: status.isConnected,
-                lastSync: lastSync
-            });
+            // Путь в Firebase
+            if (elements.firebasePath && syncStatus) {
+                elements.firebasePath.textContent = syncStatus.basePath || 'не определен';
+            }
+            
+            console.log('🔄 UI синхронизации обновлен');
             
         } catch (error) {
             console.error('❌ Ошибка обновления UI синхронизации:', error);
-            this.updateSyncUIFallback();
         }
     }
 
@@ -994,7 +1002,7 @@ class ScannerManager {
             return;
         }
         
-        showInfo('🔄 Синхронизация с облаком...', 3000);
+        showInfo('🔄 Синхронизация с облаком...', 5000);
         
         try {
             // Используем метод forceSync из FirebaseSync
@@ -1005,8 +1013,12 @@ class ScannerManager {
                 this.loadContractors();
                 this.loadReportsList();
                 this.updateSyncUI();
+                
+                // Показываем статистику
+                const status = window.appState.getSyncStatus();
+                showSuccess(`✅ Синхронизация завершена: ${status.contractorsCount} контрагентов, ${status.reportsCount} отчетов`, 3000);
             } else {
-                showWarning('Синхронизация не выполнена', 3000);
+                showWarning('⚠️ Синхронизация не выполнена', 3000);
             }
             
         } catch (error) {
