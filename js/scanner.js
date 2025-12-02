@@ -46,7 +46,10 @@ class ScannerManager {
         // Восстанавливаем сессию
         this.checkExistingSession();
         
-        // Подключаем обработчики
+        // Подключаем обработчики (ВАЖНО: сначала UI, потом обработчики)
+        this.updateUI();
+        
+        // Подключаем обработчики событий
         this.setupEventListeners();
         
         // Проверяем камеру
@@ -55,15 +58,31 @@ class ScannerManager {
         // Загружаем отчеты
         this.loadReportsList();
         
-        // Обновляем UI
-        this.updateUI();
-        
         // Настраиваем синхронизацию
         this.setupSyncDataListeners();
         this.updateSyncUI();
         
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
+    }
+    
+    async waitForAppState() {
+        // Ждем инициализации AppState если он еще не готов
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        while (!window.appState && attempts < maxAttempts) {
+            console.log(`⏳ Ожидание AppState... (попытка ${attempts + 1}/${maxAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            attempts++;
+        }
+        
+        if (window.appState) {
+            this.appState = window.appState;
+            console.log('✅ AppState загружен');
+        } else {
+            console.warn('⚠️ AppState не загружен, работаем в автономном режиме');
+        }
     }
     
     async checkAndApplyDeleted() {
@@ -442,8 +461,10 @@ class ScannerManager {
 
         // Скрытие dropdown при клике вне
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.contractor-search')) {
-                this.hideDropdown();
+            const managerModal = document.getElementById('contractorManager');
+            if (managerModal && e.target === managerModal) {
+                console.log('❌ Клик вне модального окна - закрываем');
+                this.hideContractorManager();
             }
         });
     }
@@ -1961,6 +1982,13 @@ class ScannerManager {
     setupEventListeners() {
         console.log('🔧 Настройка обработчиков событий');
 
+         // Убедимся, что DOM полностью загружен
+        if (document.readyState !== 'complete') {
+            console.log('📄 DOM еще не полностью загружен, откладываем настройку обработчиков');
+            setTimeout(() => this.setupEventListeners(), 100);
+            return;
+        }
+
         // Основные кнопки
         this.setupButton('startCamera', 'startCamera');
         this.setupButton('stopCamera', 'stopCamera');
@@ -2021,9 +2049,12 @@ class ScannerManager {
                 e.stopPropagation();
                 
                 const code = e.target.getAttribute('data-code');
+                console.log('🗑️ Удаление кода из UI:', code?.substring(0, 20));
                 this.removeCode(code);
             }
         });
+        
+        console.log('✅ Все обработчики событий настроены');
     }
 
     setupButton(elementId, methodName) {
@@ -2033,6 +2064,29 @@ class ScannerManager {
                 e.preventDefault();
                 this[methodName]();
             });
+        }
+    }
+
+    setupButtonListener(elementId, handler) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            console.log(`✅ Настроен обработчик для кнопки: ${elementId}`);
+            
+            // Удаляем старые обработчики, если есть
+            element.removeEventListener('click', handler);
+            
+            // Добавляем новый обработчик
+            element.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log(`🖱️ Кнопка нажата: ${elementId}`);
+                handler();
+            });
+            
+            // Для отладки добавляем data-атрибут
+            element.setAttribute('data-scanner-manager-bound', 'true');
+        } else {
+            console.warn(`⚠️ Кнопка не найдена: ${elementId}`);
         }
     }
 
@@ -2075,9 +2129,40 @@ class ScannerManager {
 
 // ИНИЦИАЛИЗАЦИЯ
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 DOM загружен');
+    console.log('📄 DOM загружен, инициализируем ScannerManager');
     
-    if (typeof ScannerManager !== 'undefined' && !window.scannerManager) {
+    // Небольшая задержка для гарантии полной загрузки DOM
+    setTimeout(() => {
+        if (typeof ScannerManager !== 'undefined' && !window.scannerManager) {
+            console.log('🚀 Создаем новый экземпляр ScannerManager');
+            window.scannerManager = new ScannerManager();
+        } else if (window.scannerManager) {
+            console.log('🔄 ScannerManager уже существует, обновляем UI');
+            window.scannerManager.updateUI();
+            window.scannerManager.setupEventListeners();
+        }
+    }, 100);
+});
+
+// Также инициализируем при полной загрузке страницы
+window.addEventListener('load', function() {
+    console.log('🔄 Страница полностью загружена');
+    
+    // Если ScannerManager еще не создан, создаем
+    if (!window.scannerManager && typeof ScannerManager !== 'undefined') {
+        console.log('🚀 Создаем ScannerManager после полной загрузки');
         window.scannerManager = new ScannerManager();
     }
 });
+
+// Глобальный метод для ручной инициализации (можно вызвать из консоли)
+window.initScannerManager = function() {
+    console.log('🔧 Ручная инициализация ScannerManager');
+    if (typeof ScannerManager !== 'undefined') {
+        window.scannerManager = new ScannerManager();
+        return window.scannerManager;
+    } else {
+        console.error('❌ ScannerManager не определен');
+        return null;
+    }
+};
