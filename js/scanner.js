@@ -807,6 +807,79 @@ class ScannerManager {
         showWarning('Код удален', 2000);
     }
 
+    async showAllUsers() {
+        if (!window.appState || !window.appState.firebaseSync) {
+            showError('FirebaseSync не доступен');
+            return;
+        }
+        
+        try {
+            showInfo('👥 Получение списка пользователей...', 3000);
+            
+            const users = await window.appState.firebaseSync.getAllUsers();
+            
+            // Показываем модальное окно со списком пользователей
+            this.showUsersModal(users);
+            
+        } catch (error) {
+            console.error('❌ Ошибка получения пользователей:', error);
+            showError('Ошибка: ' + error.message);
+        }
+    }
+    
+    showUsersModal(users) {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 10000;
+        `;
+        
+        const userList = users.map(user => `
+            <div class="user-item" style="padding: 10px; border-bottom: 1px solid #eee;">
+                <div><strong>ID:</strong> ${user.id.substring(0, 15)}...</div>
+                <div><strong>Device ID:</strong> ${user.deviceId || 'нет'}</div>
+                <div><strong>Контрагентов:</strong> ${user.contractorsCount || 0}</div>
+                <div><small>${user.lastActivity ? new Date(user.lastActivity).toLocaleString() : 'нет данных'}</small></div>
+            </div>
+        `).join('');
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+                <h3>👥 Все пользователи в Firebase</h3>
+                <p>Найдено пользователей: <strong>${users.length}</strong></p>
+                <div style="margin-top: 15px;">
+                    ${userList}
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button onclick="this.closest('.modal-overlay').remove()" 
+                            style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
+                        Закрыть
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Сохраняем количество пользователей для UI
+        localStorage.setItem('honest_sign_users_count', users.length);
+        this.updateSyncUI();
+    }
+    
+    clearFirebaseUserId() {
+        if (confirm('Вы уверены, что хотите сбросить Firebase User ID? Приложение создаст нового пользователя при следующей синхронизации.')) {
+            localStorage.removeItem('honest_sign_firebase_user_id');
+            showSuccess('Firebase User ID сброшен', 3000);
+            
+            // Перезагружаем страницу для применения изменений
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        }
+    }
+
     // СИМУЛЯТОР
     showSimulator() {
         const simulator = document.getElementById('simulator');
@@ -911,20 +984,19 @@ class ScannerManager {
     updateSyncUI() {
         try {
             if (!window.appState) {
-                console.log('ℹ️ AppState не доступен для обновления UI синхронизации');
+                console.log('ℹ️ AppState не доступен');
                 this.updateSyncUIFallback();
                 return;
             }
             
             const status = window.appState.getSyncStatus();
-            const syncStatus = window.appState.firebaseSync ? 
-                window.appState.firebaseSync.getStatus() : null;
             
             // Обновляем элементы UI
             const elements = {
                 syncStatus: document.getElementById('syncStatus'),
                 deviceId: document.getElementById('deviceId'),
                 userId: document.getElementById('userId'),
+                usersCount: document.getElementById('usersCount'),
                 lastSync: document.getElementById('lastSync'),
                 firebaseStatus: document.getElementById('firebaseStatus'),
                 firebasePath: document.getElementById('firebasePath')
@@ -932,35 +1004,31 @@ class ScannerManager {
             
             // Статус синхронизации
             if (elements.syncStatus) {
-                if (status.isConnected) {
-                    elements.syncStatus.textContent = '✅ Включена';
-                    elements.syncStatus.className = 'badge badge-success';
-                } else {
-                    elements.syncStatus.textContent = '❌ Ошибка';
-                    elements.syncStatus.className = 'badge badge-danger';
-                }
+                elements.syncStatus.textContent = status.isConnected ? '✅ Включена' : '❌ Ошибка';
+                elements.syncStatus.className = status.isConnected ? 'badge badge-success' : 'badge badge-danger';
             }
             
             // ID устройства
             if (elements.deviceId) {
-                elements.deviceId.textContent = status.deviceId ? 
-                    status.deviceId.substring(0, 15) + '...' : 
-                    'не задан';
+                elements.deviceId.textContent = status.deviceId || 'не задан';
             }
             
             // User ID
-            if (elements.userId && syncStatus) {
-                elements.userId.textContent = syncStatus.userId ? 
-                    syncStatus.userId.substring(0, 10) + '...' : 
-                    'не задан';
+            if (elements.userId) {
+                elements.userId.textContent = status.userId ? 
+                    status.userId.substring(0, 15) + '...' : 'не задан';
+            }
+            
+            // Количество пользователей
+            if (elements.usersCount) {
+                elements.usersCount.textContent = status.usersCount;
             }
             
             // Последняя синхронизация
             if (elements.lastSync) {
                 if (status.lastSync) {
                     const date = new Date(status.lastSync);
-                    elements.lastSync.textContent = 
-                        date.toLocaleDateString() + ' ' + date.toLocaleTimeString().substring(0, 5);
+                    elements.lastSync.textContent = date.toLocaleString();
                 } else {
                     elements.lastSync.textContent = 'никогда';
                 }
@@ -968,21 +1036,14 @@ class ScannerManager {
             
             // Статус Firebase
             if (elements.firebaseStatus) {
-                if (status.isConnected) {
-                    elements.firebaseStatus.textContent = '✅ Подключено';
-                    elements.firebaseStatus.style.color = '#28a745';
-                } else {
-                    elements.firebaseStatus.textContent = '❌ Ошибка';
-                    elements.firebaseStatus.style.color = '#dc3545';
-                }
+                elements.firebaseStatus.textContent = status.isConnected ? '✅ Подключено' : '❌ Ошибка';
+                elements.firebaseStatus.style.color = status.isConnected ? '#28a745' : '#dc3545';
             }
             
             // Путь в Firebase
-            if (elements.firebasePath && syncStatus) {
-                elements.firebasePath.textContent = syncStatus.basePath || 'не определен';
+            if (elements.firebasePath) {
+                elements.firebasePath.textContent = status.basePath || 'не определен';
             }
-            
-            console.log('🔄 UI синхронизации обновлен');
             
         } catch (error) {
             console.error('❌ Ошибка обновления UI синхронизации:', error);
@@ -1574,6 +1635,8 @@ class ScannerManager {
         this.setupButton('importDataBtn', 'importData');
         this.setupButton('forceSyncBtn', 'forceSync');
         this.setupButton('testSyncBtn', 'testSyncConnection');
+        this.setupButton('showUsersBtn', 'showAllUsers');
+        this.setupButton('clearFirebaseIdBtn', 'clearFirebaseUserId');
     
         // Тестовые коды
         document.addEventListener('click', (e) => {
