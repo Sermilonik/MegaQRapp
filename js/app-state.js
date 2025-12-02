@@ -337,6 +337,17 @@ class AppState {
             return false;
         }
     }
+
+    saveReports() {
+        try {
+            localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
+            console.log(`✅ Сохранено ${this.reports.length} отчетов`);
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка сохранения отчетов:', error);
+            return false;
+        }
+    }
     
     clearReports() {
         this.reports = [];
