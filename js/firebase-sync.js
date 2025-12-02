@@ -11,339 +11,142 @@ class FirebaseSync {
     
     async init() {
         try {
-            // Проверяем наличие Firebase
+            console.log('🔥 Инициализация FirebaseSync...');
+            
+            // Проверяем Firebase
             if (typeof firebase === 'undefined') {
                 console.log('ℹ️ Firebase не загружен');
                 return false;
             }
             
-            // Инициализируем Firebase
             if (!firebase.apps.length) {
-                firebase.initializeApp(window.firebaseConfig);
+                console.log('⚠️ Firebase не инициализирован');
+                return false;
             }
             
             this.db = firebase.firestore();
             this.auth = firebase.auth();
             
-            // Анонимная аутентификация
-            await this.auth.signInAnonymously();
-            
-            this.userId = this.auth.currentUser ? this.auth.currentUser.uid : 'anonymous';
-            this.isConnected = true;
-            
-            console.log('✅ Firebase подключен');
-            
-            // Настраиваем слушатели изменений
-            this.setupListeners();
-            
-            return true;
+            // Пробуем анонимную аутентификацию
+            try {
+                await this.auth.signInAnonymously();
+                this.userId = this.auth.currentUser.uid;
+                this.isConnected = true;
+                console.log('✅ FirebaseSync подключен, User ID:', this.userId);
+                return true;
+            } catch (authError) {
+                console.log('⚠️ Анонимная аутентификация не удалась, работаем локально');
+                this.isConnected = false;
+                return false;
+            }
             
         } catch (error) {
-            console.error('❌ Ошибка инициализации Firebase:', error);
+            console.error('❌ Ошибка инициализации FirebaseSync:', error);
             this.isConnected = false;
             return false;
         }
     }
     
-    setupListeners() {
-        if (!this.db || !this.userId) return;
-        
-        // Слушаем изменения контрагентов
-        this.db.collection('users').doc(this.userId)
-            .collection('contractors')
-            .onSnapshot((snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added' || change.type === 'modified') {
-                        const contractor = change.doc.data();
-                        this.handleContractorUpdate(contractor);
-                    }
-                });
-            });
-        
-        // Слушаем изменения отчетов
-        this.db.collection('users').doc(this.userId)
-            .collection('reports')
-            .onSnapshot((snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    if (change.type === 'added' || change.type === 'modified') {
-                        const report = change.doc.data();
-                        this.handleReportUpdate(report);
-                    }
-                });
-            });
-    }
-    
-    handleContractorUpdate(contractor) {
-        if (!this.appState) return;
-        
-        // Игнорируем свои собственные обновления
-        if (contractor.deviceId === this.deviceId) {
-            return;
-        }
-        
-        console.log('📡 Получен контрагент из облака:', contractor.name);
-        
-        // Обновляем локальные данные
-        this.appState.mergeContractors([contractor]);
-        this.appState.saveContractors();
-        
-        // Показываем уведомление
-        showInfo(`Обновлен контрагент: ${contractor.name}`, 3000);
-    }
-    
-    handleReportUpdate(report) {
-        if (!this.appState) return;
-        
-        // Игнорируем свои собственные обновления
-        if (report.deviceId === this.deviceId) {
-            return;
-        }
-        
-        console.log('📡 Получен отчет из облака:', report.id);
-        
-        // Обновляем локальные данные
-        this.appState.mergeReports([report]);
-        this.appState.saveReports();
-    }
-    
-    // Синхронизация контрагентов
-    async syncContractors(localContractors) {
-        if (!this.isConnected || !this.db || !this.userId) {
+    async syncContractors(contractors) {
+        if (!this.isConnected || !this.db) {
             console.log('ℹ️ Firebase не подключен, пропускаем синхронизацию');
-            return localContractors;
+            return contractors;
         }
         
         try {
-            // Получаем контрагентов из облака
-            const snapshot = await this.db.collection('users').doc(this.userId)
-                .collection('contractors')
-                .get();
+            console.log('🔄 Синхронизация контрагентов...');
             
+            // Используем общую коллекцию для всех пользователей
+            const collectionRef = this.db.collection('contractors');
+            
+            // Получаем из облака
+            const snapshot = await collectionRef.get();
             const cloudContractors = [];
+            
             snapshot.forEach(doc => {
-                cloudContractors.push(doc.data());
+                cloudContractors.push({ 
+                    id: doc.id, 
+                    ...doc.data(),
+                    firebaseId: doc.id // Сохраняем Firebase ID
+                });
             });
             
-            console.log(`📊 Облачные контрагенты: ${cloudContractors.length}, Локальные: ${localContractors.length}`);
+            console.log(`📊 Облачные: ${cloudContractors.length}, Локальные: ${contractors.length}`);
             
             // Объединяем данные
-            const mergedContractors = this.mergeData(localContractors, cloudContractors);
+            const merged = this.mergeContractorsData(contractors, cloudContractors);
             
             // Сохраняем обратно в облако
-            await this.saveContractorsToCloud(mergedContractors);
+            await this.saveContractorsToCloud(merged);
             
-            return mergedContractors;
+            return merged;
             
         } catch (error) {
             console.error('❌ Ошибка синхронизации контрагентов:', error);
-            return localContractors;
+            return contractors;
         }
     }
     
-    // Синхронизация отчетов
-    async syncReports(localReports) {
-        if (!this.isConnected || !this.db || !this.userId) {
-            console.log('ℹ️ Firebase не подключен, пропускаем синхронизацию');
-            return localReports;
-        }
+    mergeContractorsData(local, cloud) {
+        const merged = [...local];
         
-        try {
-            // Получаем отчеты из облака
-            const snapshot = await this.db.collection('users').doc(this.userId)
-                .collection('reports')
-                .get();
-            
-            const cloudReports = [];
-            snapshot.forEach(doc => {
-                cloudReports.push(doc.data());
-            });
-            
-            console.log(`📊 Облачные отчеты: ${cloudReports.length}, Локальные: ${localReports.length}`);
-            
-            // Объединяем данные
-            const mergedReports = this.mergeData(localReports, cloudReports);
-            
-            // Сохраняем обратно в облако
-            await this.saveReportsToCloud(mergedReports);
-            
-            return mergedReports;
-            
-        } catch (error) {
-            console.error('❌ Ошибка синхронизации отчетов:', error);
-            return localReports;
-        }
-    }
-    
-    // Объединение данных
-    mergeData(localData, cloudData) {
-        const merged = [...localData];
-        const dataMap = new Map();
+        // Создаем карту для быстрого поиска
+        const localMap = new Map();
+        local.forEach(c => localMap.set(c.id, c));
         
-        // Добавляем локальные данные в карту
-        localData.forEach(item => {
-            dataMap.set(item.id, { ...item, source: 'local' });
-        });
-        
-        // Добавляем или обновляем облачными данными
-        cloudData.forEach(cloudItem => {
-            const existing = dataMap.get(cloudItem.id);
+        cloud.forEach(cloudContractor => {
+            const localContractor = localMap.get(cloudContractor.id);
             
-            if (existing) {
+            if (localContractor) {
                 // Сравниваем даты обновления
-                const existingDate = new Date(existing.updatedAt || existing.createdAt);
-                const cloudDate = new Date(cloudItem.updatedAt || cloudItem.createdAt);
+                const localDate = new Date(localContractor.updatedAt || localContractor.createdAt);
+                const cloudDate = new Date(cloudContractor.updatedAt || cloudContractor.createdAt);
                 
-                if (cloudDate > existingDate) {
-                    dataMap.set(cloudItem.id, { ...cloudItem, source: 'cloud' });
+                if (cloudDate > localDate) {
+                    // Обновляем локальные данные облачными
+                    const index = merged.findIndex(c => c.id === cloudContractor.id);
+                    if (index !== -1) {
+                        merged[index] = cloudContractor;
+                    }
                 }
             } else {
-                dataMap.set(cloudItem.id, { ...cloudItem, source: 'cloud' });
+                // Добавляем новый контрагент из облака
+                merged.push(cloudContractor);
             }
         });
         
-        // Преобразуем обратно в массив
-        return Array.from(dataMap.values()).map(({ source, ...item }) => item);
+        return merged;
     }
     
-    // Сохранение контрагентов в облако
     async saveContractorsToCloud(contractors) {
-        if (!this.isConnected || !this.db || !this.userId) return;
+        if (!this.isConnected || !this.db) return;
         
         try {
             const batch = this.db.batch();
-            const collectionRef = this.db.collection('users').doc(this.userId).collection('contractors');
+            const collectionRef = this.db.collection('contractors');
             
-            // Ограничиваем количество операций в батче
-            const chunkSize = 50;
-            for (let i = 0; i < contractors.length; i += chunkSize) {
-                const chunk = contractors.slice(i, i + chunkSize);
+            // Сохраняем только свои контрагенты (с deviceId)
+            const myContractors = contractors.filter(c => c.deviceId === this.deviceId);
+            
+            myContractors.forEach(contractor => {
+                const docId = contractor.id.toString();
+                const docRef = collectionRef.doc(docId);
                 
-                chunk.forEach(contractor => {
-                    const docRef = collectionRef.doc(contractor.id.toString());
-                    batch.set(docRef, {
-                        ...contractor,
-                        deviceId: this.deviceId,
-                        updatedAt: new Date().toISOString()
-                    });
-                });
-                
-                await batch.commit();
-            }
-            
-            console.log(`✅ Контрагенты сохранены в облако: ${contractors.length}`);
-            
-        } catch (error) {
-            console.error('❌ Ошибка сохранения контрагентов в облако:', error);
-        }
-    }
-    
-    // Сохранение отчетов в облако
-    async saveReportsToCloud(reports) {
-        if (!this.isConnected || !this.db || !this.userId) return;
-        
-        try {
-            const batch = this.db.batch();
-            const collectionRef = this.db.collection('users').doc(this.userId).collection('reports');
-            
-            reports.forEach(report => {
-                const docRef = collectionRef.doc(report.id.toString());
                 batch.set(docRef, {
-                    ...report,
-                    deviceId: this.deviceId,
-                    updatedAt: new Date().toISOString()
-                });
-            });
-            
-            await batch.commit();
-            console.log(`✅ Отчеты сохранены в облако: ${reports.length}`);
-            
-        } catch (error) {
-            console.error('❌ Ошибка сохранения отчетов в облако:', error);
-        }
-    }
-    
-    // Добавление контрагента
-    async addContractor(contractor) {
-        if (!this.isConnected || !this.db || !this.userId) return;
-        
-        try {
-            await this.db.collection('users').doc(this.userId)
-                .collection('contractors')
-                .doc(contractor.id.toString())
-                .set({
                     ...contractor,
-                    deviceId: this.deviceId,
-                    updatedAt: new Date().toISOString()
-                });
-            
-            console.log('✅ Контрагент добавлен в облако:', contractor.name);
-            
-        } catch (error) {
-            console.error('❌ Ошибка добавления контрагента в облако:', error);
-        }
-    }
-    
-    // Удаление контрагента
-    async deleteContractor(contractorId) {
-        if (!this.isConnected || !this.db || !this.userId) return;
-        
-        try {
-            await this.db.collection('users').doc(this.userId)
-                .collection('contractors')
-                .doc(contractorId.toString())
-                .delete();
-            
-            console.log('✅ Контрагент удален из облака:', contractorId);
-            
-        } catch (error) {
-            console.error('❌ Ошибка удаления контрагента из облака:', error);
-        }
-    }
-    
-    // Добавление отчета
-    async addReport(report) {
-        if (!this.isConnected || !this.db || !this.userId) return;
-        
-        try {
-            await this.db.collection('users').doc(this.userId)
-                .collection('reports')
-                .doc(report.id.toString())
-                .set({
-                    ...report,
-                    deviceId: this.deviceId,
-                    updatedAt: new Date().toISOString()
-                });
-            
-            console.log('✅ Отчет добавлен в облако:', report.id);
-            
-        } catch (error) {
-            console.error('❌ Ошибка добавления отчета в облако:', error);
-        }
-    }
-    
-    // Очистка отчетов
-    async clearReports() {
-        if (!this.isConnected || !this.db || !this.userId) return;
-        
-        try {
-            const snapshot = await this.db.collection('users').doc(this.userId)
-                .collection('reports')
-                .get();
-            
-            const batch = this.db.batch();
-            snapshot.forEach(doc => {
-                batch.delete(doc.ref);
+                    updatedAt: new Date().toISOString(),
+                    lastSync: new Date().toISOString()
+                }, { merge: true });
             });
             
             await batch.commit();
-            console.log('✅ Отчеты очищены в облаке');
+            console.log(`✅ Сохранено ${myContractors.length} контрагентов в облако`);
             
         } catch (error) {
-            console.error('❌ Ошибка очистки отчетов в облаке:', error);
+            console.error('❌ Ошибка сохранения в облако:', error);
         }
     }
     
-    // Получение статуса подключения
     getStatus() {
         return {
             isConnected: this.isConnected,
