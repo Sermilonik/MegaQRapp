@@ -53,6 +53,29 @@
                     👥 Управление контрагентами
                 </button>
             </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h3>🗑️ Управление удаленными контрагентами</h3>
+                </div>
+                
+                <div class="sync-actions">
+                    <button class="btn btn-warning" id="syncDeletedBtn">
+                        🔄 Синхронизировать удаленные
+                    </button>
+                    <button class="btn btn-danger" id="clearDeletedBtn">
+                        🧹 Очистить список удаленных
+                    </button>
+                    <button class="btn btn-info" id="showDeletedBtn">
+                        👁️ Показать удаленных
+                    </button>
+                </div>
+                
+                <div id="deletedInfo" style="margin-top: 15px; font-size: 12px; color: #666;">
+                    <div>🗑️ Удалено контрагентов: <span id="deletedCount">0</span></div>
+                    <div>🕐 Последнее обновление: <span id="deletedLastUpdate">-</span></div>
+                </div>
+            </div>
         
             <div id="selectedContractors" class="selected-contractors hidden">
                 <div class="selected-header">
