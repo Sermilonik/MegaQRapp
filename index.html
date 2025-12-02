@@ -16,12 +16,13 @@
         <!-- Библиотеки -->
         <script src="https://unpkg.com/html5-qrcode"></script>
         
-        <!-- bwip-js (проверенная версия) -->
+        <!-- bwip-js -->
         <script src="https://cdn.jsdelivr.net/npm/bwip-js@4.2.0/dist/bwip-js.min.js"></script>
         
-        <!-- pdfMake -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+        <!-- Firebase -->
+        <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
     </head>
 <body>
     <div class="container">
@@ -283,7 +284,6 @@
 
     <!-- Firebase-->
     <script src="js/firebase-config.js"></script>
-    <script src="js/firebase-sync.js"></script>
 
     <!-- Библиотеки для PDF генерации -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
@@ -292,97 +292,35 @@
     <!-- Подключаем скрипты -->
     <script src="js/utils.js"></script>
     <script src="js/app-state.js"></script>
-    <script src="js/datamatrix.js"></script>
+    <script src="js/firebase-sync.js"></script>
     <script src="js/pdf-generator-bwip.js"></script>
-    <!--<script src="js/pdf-generator.js"></script>-->
     <script src="js/scanner.js"></script>
 
+    <!--инициализация-->
     <script>
-        // Инициализация при загрузке
         document.addEventListener('DOMContentLoaded', function() {
             console.log('📄 DOM загружен');
             
             // Проверяем библиотеки
             console.log('🔍 Проверка библиотек:');
-            console.log('- Html5Qrcode:', typeof Html5Qrcode !== 'undefined' ? '✅ загружен' : '❌ не загружен');
-            console.log('- pdfMake:', typeof pdfMake !== 'undefined' ? '✅ загружен' : '❌ не загружен');
+            console.log('- Html5Qrcode:', typeof Html5Qrcode !== 'undefined' ? '✅' : '❌');
+            console.log('- Firebase:', typeof firebase !== 'undefined' ? '✅' : '❌');
+            console.log('- AppState:', typeof AppState !== 'undefined' ? '✅' : '❌');
             
-            // Создаем эмулятор bwipjs, так как библиотека не загружается
-            if (typeof bwipjs === 'undefined') {
-                console.log('⚠️ bwip-js не загружен, создаем эмулятор...');
-                
-                window.bwipjs = {
-                    toCanvas: function(canvas, options) {
-                        console.log('Используем эмулятор bwip-js для:', options.text?.substring(0, 20) + '...');
-                        
-                        const ctx = canvas.getContext('2d');
-                        const size = canvas.width;
-                        const data = options.text || '';
-                        
-                        // Используем простой генератор
-                        if (window.simpleDataMatrix && window.simpleDataMatrix.generateDataMatrix) {
-                            window.simpleDataMatrix.generateDataMatrix(data, size).then(dataUrl => {
-                                const img = new Image();
-                                img.onload = function() {
-                                    ctx.clearRect(0, 0, size, size);
-                                    ctx.drawImage(img, 0, 0, size, size);
-                                };
-                                img.src = dataUrl;
-                            });
-                        } else {
-                            // Простой fallback
-                            ctx.fillStyle = '#FFFFFF';
-                            ctx.fillRect(0, 0, size, size);
-                            ctx.fillStyle = '#000000';
-                            ctx.font = '10px Arial';
-                            ctx.textAlign = 'center';
-                            ctx.textBaseline = 'middle';
-                            ctx.fillText('DM', size/2, size/2);
-                            ctx.fillText(data.substring(0, 5), size/2, size/2 + 15);
-                        }
-                    }
-                };
-                
-                console.log('✅ Создан эмулятор bwip-js');
-            } else {
-                console.log('✅ bwip-js загружен');
-            }
-            
-            // Инициализируем приложение
+            // Проверяем инициализацию
             setTimeout(() => {
                 if (typeof ScannerManager !== 'undefined' && !window.scannerManager) {
                     try {
                         window.scannerManager = new ScannerManager();
                         console.log('✅ ScannerManager инициализирован');
-                        
-                        // Показываем статус
                         showSuccess('Приложение готово к работе!', 3000);
                     } catch (error) {
                         console.error('❌ Ошибка инициализации ScannerManager:', error);
                         showError('Ошибка загрузки приложения: ' + error.message);
                     }
                 }
-            }, 500);
+            }, 1000);
         });
-        
-        // Функция для проверки загрузки всех скриптов
-        function checkScripts() {
-            const scripts = [
-                { name: 'Utils', check: typeof showSuccess !== 'undefined' },
-                { name: 'AppState', check: typeof AppState !== 'undefined' },
-                { name: 'SimpleDataMatrix', check: typeof simpleDataMatrix !== 'undefined' },
-                { name: 'PDFGenerator', check: typeof pdfMakeGenerator !== 'undefined' },
-                { name: 'ScannerManager', check: typeof ScannerManager !== 'undefined' }
-            ];
-            
-            console.log('📋 Статус загрузки скриптов:');
-            scripts.forEach(script => {
-                console.log(`- ${script.name}: ${script.check ? '✅' : '❌'}`);
-            });
-        }
-        
-        // Проверяем через 2 секунды
-        setTimeout(checkScripts, 2000);
     </script>
 </body>
 </html>
