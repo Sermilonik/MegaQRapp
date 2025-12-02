@@ -229,6 +229,141 @@ class ScannerManager {
         }
     }
 
+    // УДАЛЕНИЕ КОНТРАГЕНТОВ
+    async syncDeletedContractors() {
+        if (!window.appState || !window.appState.firebaseSync) {
+            showError('FirebaseSync не доступен');
+            return;
+        }
+        
+        try {
+            showInfo('🔄 Синхронизация списков удаленных контрагентов...', 3000);
+            
+            const deleted = await window.appState.firebaseSync.syncDeletedContractors();
+            
+            // Обновляем UI
+            this.updateDeletedUI(deleted);
+            
+            showSuccess(`Синхронизировано ${deleted.length} удаленных контрагентов`, 3000);
+            
+        } catch (error) {
+            console.error('❌ Ошибка синхронизации удаленных контрагентов:', error);
+            showError('Ошибка: ' + error.message);
+        }
+    }
+    
+    async clearDeletedContractorsList() {
+        if (!window.appState || !window.appState.firebaseSync) {
+            showError('FirebaseSync не доступен');
+            return;
+        }
+        
+        if (!confirm('Вы уверены, что хотите очистить список удаленных контрагентов?\n\n⚠️ ВНИМАНИЕ: После очистки удаленные контрагенты могут снова появиться при синхронизации с другими устройствами.')) {
+            return;
+        }
+        
+        try {
+            showInfo('🧹 Очистка списка удаленных контрагентов...', 3000);
+            
+            const success = await window.appState.firebaseSync.clearDeletedContractorsList();
+            
+            if (success) {
+                // Обновляем UI
+                this.updateDeletedUI([]);
+                showSuccess('Список удаленных контрагентов очищен', 3000);
+            } else {
+                showError('Не удалось очистить список удаленных', 3000);
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка очистки списка удаленных контрагентов:', error);
+            showError('Ошибка: ' + error.message);
+        }
+    }
+    
+    async showDeletedContractors() {
+        if (!window.appState || !window.appState.firebaseSync) {
+            showError('FirebaseSync не доступен');
+            return;
+        }
+        
+        try {
+            showInfo('👁️ Получение списка удаленных контрагентов...', 3000);
+            
+            const deleted = await window.appState.firebaseSync.getDeletedContractors();
+            
+            // Показываем модальное окно
+            this.showDeletedModal(deleted);
+            
+        } catch (error) {
+            console.error('❌ Ошибка получения удаленных контрагентов:', error);
+            showError('Ошибка: ' + error.message);
+        }
+    }
+    
+    showDeletedModal(deletedContractors) {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.style.cssText = `
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 10000;
+        `;
+        
+        const deletedList = deletedContractors.map(contractor => `
+            <div class="deleted-item" style="padding: 10px; border-bottom: 1px solid #eee; background: #fff8f8;">
+                <div><strong>${contractor.name}</strong></div>
+                <div><small>Категория: ${contractor.category}</small></div>
+                <div><small>Удален: ${contractor.deletedAt ? new Date(contractor.deletedAt).toLocaleString() : 'неизвестно'}</small></div>
+                <div><small>ID: ${contractor.id}</small></div>
+            </div>
+        `).join('');
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 20px; border-radius: 10px; max-width: 90%; max-height: 80vh; overflow-y: auto;">
+                <h3>🗑️ Удаленные контрагенты</h3>
+                <p>Всего удалено: <strong>${deletedContractors.length}</strong></p>
+                <div style="margin-top: 15px; max-height: 50vh; overflow-y: auto;">
+                    ${deletedList || '<p style="text-align: center; color: #666;">Нет удаленных контрагентов</p>'}
+                </div>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button onclick="this.closest('.modal-overlay').remove()" 
+                            style="padding: 10px 20px; background: #007bff; color: white; border: none; border-radius: 5px;">
+                        Закрыть
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+    
+    updateDeletedUI(deletedContractors = null) {
+        try {
+            // Если не передали данные, получаем из localStorage
+            if (!deletedContractors) {
+                const deletedData = localStorage.getItem('honest_sign_deleted_contractors');
+                deletedContractors = deletedData ? JSON.parse(deletedData) : [];
+            }
+            
+            // Обновляем элементы UI
+            const deletedCount = document.getElementById('deletedCount');
+            const deletedLastUpdate = document.getElementById('deletedLastUpdate');
+            
+            if (deletedCount) {
+                deletedCount.textContent = deletedContractors.length;
+            }
+            
+            if (deletedLastUpdate) {
+                const now = new Date();
+                deletedLastUpdate.textContent = now.toLocaleTimeString();
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка обновления UI удаленных контрагентов:', error);
+        }
+    }
+
     // ПОИСК КОНТРАГЕНТОВ
     initContractorSearch() {
         const searchInput = document.getElementById('contractorSearch');
@@ -535,12 +670,65 @@ class ScannerManager {
     deleteContractor(contractorId) {
         if (!confirm('Удалить этого контрагента?')) return;
         
+        const contractor = this.allContractors.find(c => c.id === contractorId);
+        if (!contractor) return;
+        
+        console.log(`🗑️ Удаление контрагента: ${contractor.name}`);
+        
+        // Удаляем из локальных списков
         this.allContractors = this.allContractors.filter(c => c.id !== contractorId);
         this.selectedContractors = this.selectedContractors.filter(c => c.id !== contractorId);
+        
+        // Сохраняем контрагенты
         this.saveContractors();
+        
+        // Обновляем UI
         this.updateSelectedContractorsUI();
         this.loadContractorsManagerList();
-        showWarning('Контрагент удален', 3000);
+        
+        // Пометка как удаленного в Firebase
+        if (window.appState && window.appState.firebaseSync) {
+            window.appState.firebaseSync.markContractorAsDeleted(contractor)
+                .then(success => {
+                    if (success) {
+                        console.log(`✅ Контрагент "${contractor.name}" помечен как удаленный в облаке`);
+                    } else {
+                        console.log(`⚠️ Не удалось пометить контрагента как удаленного в облаке`);
+                    }
+                })
+                .catch(error => {
+                    console.error('❌ Ошибка пометки удаленного контрагента:', error);
+                });
+        }
+        
+        showWarning(`Контрагент "${contractor.name}" удален`, 3000);
+    }
+    
+    // Добавьте метод для очистки удаленных контрагентов:
+    async clearDeletedContractors() {
+        if (!window.appState || !window.appState.firebaseSync) {
+            showError('FirebaseSync не доступен');
+            return;
+        }
+        
+        if (!confirm('Очистить список удаленных контрагентов? Они снова могут появиться при синхронизации.')) {
+            return;
+        }
+        
+        try {
+            showInfo('🗑️ Очистка списка удаленных контрагентов...', 3000);
+            
+            // Тут нужно добавить метод в firebase-sync для очистки удаленных
+            // Сначала создадим его в firebase-sync.js:
+            // async clearDeletedContractorsList() { ... }
+            
+            // Пока просто покажем сообщение
+            showSuccess('Для полной очистки удаленных контрагентов обратитесь к администратору', 3000);
+            
+        } catch (error) {
+            console.error('❌ Ошибка очистки удаленных контрагентов:', error);
+            showError('Ошибка: ' + error.message);
+        }
     }
 
     // КАМЕРА И СКАНИРОВАНИЕ
@@ -1619,7 +1807,10 @@ class ScannerManager {
         this.setupButton('addManualContractorBtn', 'showAddContractorForm');
         this.setupButton('importContractorsBtn', 'showImportForm');
         this.setupButton('showContractorManagerBtn', 'showContractorManager');
-        
+        this.setupButton('syncDeletedBtn', 'syncDeletedContractors');
+        this.setupButton('clearDeletedBtn', 'clearDeletedContractorsList');
+        this.setupButton('showDeletedBtn', 'showDeletedContractors');
+
         // Модальные окна
         this.setupButton('hideContractorManagerBtn', 'hideContractorManager');
         this.setupButton('hideAddContractorFormBtn', 'hideAddContractorForm');
