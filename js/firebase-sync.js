@@ -209,15 +209,21 @@ class FirebaseSync {
         }
         
         try {
-            console.log('🔄 Синхронизация контрагентов...');
+            console.log('🔄 Синхронизация контрагентов с автоматическим удалением...');
             
-            // 1. Получаем контрагентов со всех пользователей
+            // 1. Сначала синхронизируем списки удаленных
+            const allDeleted = await this.syncDeletedContractors();
+            
+            // 2. Получаем контрагентов со всех пользователей
             const allUsersContractors = await this.syncWithAllUsers(localContractors);
             
-            // 2. Фильтруем удаленных
-            const filteredContractors = await this.filterDeletedContractors(allUsersContractors);
+            // 3. Автоматически удаляем помеченных как удаленные
+            const cleanedContractors = this.removeDeletedContractors(allUsersContractors, allDeleted);
             
-            // 3. Сохраняем свои контрагенты
+            // 4. Фильтруем дополнительно по локальному списку удаленных
+            const filteredContractors = await this.filterDeletedContractors(cleanedContractors);
+            
+            // 5. Сохраняем свои контрагенты
             await this.saveMyContractors(filteredContractors);
             
             console.log(`✅ Синхронизация завершена. Итог: ${filteredContractors.length} контрагентов`);
@@ -227,6 +233,35 @@ class FirebaseSync {
             console.error('❌ Ошибка синхронизации контрагентов:', error);
             return localContractors;
         }
+    }
+
+    // Метод для автоматического удаления
+    removeDeletedContractors(contractors, deletedList) {
+        if (!deletedList || deletedList.length === 0) {
+            console.log('ℹ️ Нет удаленных контрагентов для фильтрации');
+            return contractors;
+        }
+        
+        console.log(`🗑️ Автоматическое удаление ${deletedList.length} контрагентов...`);
+        
+        const deletedIds = new Set(deletedList.map(d => d.id));
+        const initialCount = contractors.length;
+        
+        const filtered = contractors.filter(contractor => !deletedIds.has(contractor.id));
+        
+        const removedCount = initialCount - filtered.length;
+        if (removedCount > 0) {
+            console.log(`✅ Автоматически удалено ${removedCount} контрагентов`);
+            
+            // Показываем уведомление об удаленных контрагентах
+            if (removedCount > 0 && window.scannerManager) {
+                setTimeout(() => {
+                    showInfo(`Автоматически удалено ${removedCount} контрагентов (помечены как удаленные на других устройствах)`, 5000);
+                }, 1000);
+            }
+        }
+        
+        return filtered;
     }
     
     async filterDeletedContractors(contractors) {
@@ -331,7 +366,7 @@ class FirebaseSync {
     
     async syncDeletedContractors() {
         try {
-            console.log('🔄 Синхронизация списков удаленных контрагентов...');
+            console.log('🔄 Синхронизация и применение удаленных контрагентов...');
             
             // Получаем удаленных контрагентов от всех пользователей
             const allUsers = await this.getAllUsers();
@@ -347,19 +382,102 @@ class FirebaseSync {
                 allDeleted.push(...userDeleted);
             }
             
-            // Объединяем со своими удаленными
+            // Получаем свои удаленные
             const myDeleted = await this.getDeletedContractors();
+            
+            // Объединяем все удаленные
             const mergedDeleted = this.mergeDeletedContractors(myDeleted, allDeleted);
             
             // Сохраняем объединенный список
             await this.saveDeletedContractors(mergedDeleted);
             
+            // Сохраняем локально для быстрого доступа
+            await this.saveDeletedLocally(mergedDeleted);
+            
             console.log(`📊 Общий список удаленных: ${mergedDeleted.length} контрагентов`);
+            
+            // Автоматически применяем удаление к локальным данным
+            await this.applyDeletedToLocal(mergedDeleted);
+            
             return mergedDeleted;
             
         } catch (error) {
             console.error('❌ Ошибка синхронизации удаленных контрагентов:', error);
             return [];
+        }
+    }
+    
+    // Сохранение удаленных локально
+    async saveDeletedLocally(deletedContractors) {
+        try {
+            // Сохраняем в localStorage
+            localStorage.setItem('honest_sign_deleted_contractors', JSON.stringify(deletedContractors));
+            
+            // Сохраняем время последнего обновления
+            localStorage.setItem('honest_sign_deleted_last_update', new Date().toISOString());
+            
+            console.log(`💾 Сохранено ${deletedContractors.length} удаленных контрагентов локально`);
+            
+        } catch (error) {
+            console.error('❌ Ошибка сохранения удаленных локально:', error);
+        }
+    }
+
+    // Применение удаленных к локальным данным
+    async applyDeletedToLocal(deletedContractors) {
+        try {
+            if (!this.appState) {
+                console.log('ℹ️ AppState не доступен для применения удаления');
+                return;
+            }
+            
+            if (!deletedContractors || deletedContractors.length === 0) {
+                console.log('ℹ️ Нет удаленных контрагентов для применения');
+                return;
+            }
+            
+            console.log('🔧 Применение удаленных контрагентов к локальным данным...');
+            
+            const deletedIds = new Set(deletedContractors.map(d => d.id));
+            const localContractors = this.appState.getAllContractors();
+            const initialCount = localContractors.length;
+            
+            // Фильтруем локальные контрагенты
+            const filtered = localContractors.filter(contractor => !deletedIds.has(contractor.id));
+            
+            const removedCount = initialCount - filtered.length;
+            if (removedCount > 0) {
+                // Обновляем AppState
+                this.appState.contractors = filtered;
+                this.appState.saveContractors();
+                
+                console.log(`✅ Удалено ${removedCount} контрагентов из локальных данных`);
+                
+                // Оповещаем UI об изменении
+                this.notifyLocalChanges(removedCount);
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка применения удаленных к локальным данным:', error);
+        }
+    }
+
+    // Оповещение об изменениях
+    notifyLocalChanges(removedCount) {
+        // Оповещаем ScannerManager если он существует
+        if (window.scannerManager) {
+            // Перезагружаем контрагентов в UI
+            setTimeout(() => {
+                if (window.scannerManager.loadContractors) {
+                    window.scannerManager.loadContractors();
+                    console.log('🔄 UI контрагентов обновлен после удаления');
+                }
+                
+                // Показываем уведомление
+                if (removedCount > 0) {
+                    showInfo(`Удалено ${removedCount} контрагентов (синхронизировано с другими устройствами)`, 5000);
+                }
+            }, 500);
         }
     }
     
@@ -581,14 +699,28 @@ class FirebaseSync {
         }
         
         try {
-            console.log('🚀 Принудительная синхронизация всех данных...');
+            console.log('🚀 Принудительная синхронизация с удалением...');
+            showInfo('🔄 Синхронизация с автоматическим удалением...', 5000);
             
-            // 0. Сначала синхронизируем списки удаленных
-            await this.syncDeletedContractors();
+            // 1. Сначала синхронизируем и применяем удаленные
+            const allDeleted = await this.syncDeletedContractors();
             
-            // 1. Синхронизируем контрагентов
+            // 2. Получаем текущие контрагенты
             const contractors = this.appState.getAllContractors();
-            const syncedContractors = await this.syncContractors(contractors);
+            
+            // 3. Фильтруем удаленных
+            const deletedIds = new Set(allDeleted.map(d => d.id));
+            const filteredContractors = contractors.filter(c => !deletedIds.has(c.id));
+            
+            // 4. Сохраняем отфильтрованные контрагенты
+            if (filteredContractors.length !== contractors.length) {
+                this.appState.contractors = filteredContractors;
+                this.appState.saveContractors();
+                console.log(`✅ Локальные контрагенты обновлены: удалено ${contractors.length - filteredContractors.length}`);
+            }
+            
+            // 5. Синхронизируем с облаком
+            const syncedContractors = await this.syncContractors(filteredContractors);
             
             if (syncedContractors && syncedContractors.length > 0) {
                 this.appState.contractors = syncedContractors;
@@ -596,7 +728,7 @@ class FirebaseSync {
                 console.log(`✅ Контрагенты синхронизированы: ${syncedContractors.length}`);
             }
             
-            // 2. Синхронизируем отчеты
+            // 6. Синхронизируем отчеты
             const reports = this.appState.getAllReports();
             const syncedReports = await this.syncReports(reports);
             
@@ -606,10 +738,10 @@ class FirebaseSync {
                 console.log(`✅ Отчеты синхронизированы: ${syncedReports.length}`);
             }
             
-            // 3. Обновляем время синхронизации
+            // 7. Обновляем время синхронизации
             localStorage.setItem('honest_sign_last_sync', new Date().toISOString());
             
-            console.log('✅ Полная синхронизация завершена');
+            console.log('✅ Полная синхронизация с удалением завершена');
             return true;
             
         } catch (error) {
