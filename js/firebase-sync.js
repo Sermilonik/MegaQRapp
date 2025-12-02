@@ -7,10 +7,7 @@ class FirebaseSync {
         this.isConnected = false;
         this.userId = null;
         this.deviceId = appState ? appState.deviceId : null;
-        this.collections = {
-            contractors: 'contractors_v2',
-            reports: 'reports_v2'
-        };
+        this.baseCollectionPath = 'users'; // Базовая коллекция
     }
     
     async init() {
@@ -51,24 +48,22 @@ class FirebaseSync {
                 this.isConnected = true;
                 
                 console.log('✅ FirebaseSync подключен');
-                console.log('📱 User ID:', this.userId);
+                console.log('📱 Firebase User ID:', this.userId);
                 console.log('📱 Device ID:', this.deviceId);
+                
+                // Используем путь: users/{userId}/qr_scanner_production_v1
+                console.log('📁 Путь к данным:', `users/${this.userId}/qr_scanner_production_v1`);
                 
                 return true;
             } catch (authError) {
                 console.error('❌ Ошибка аутентификации Firebase:', authError);
                 console.log('💡 Решение: Включите анонимную аутентификацию в Firebase Console');
-                console.log('1. Перейдите в Firebase Console → Authentication → Sign-in method');
-                console.log('2. Включите "Anonymous" метод');
                 
-                // Пробуем альтернативный подход - работаем без аутентификации
-                console.log('🔄 Пробуем работу без аутентификации...');
-                
-                // Используем deviceId как идентификатор
-                this.userId = 'device_' + this.deviceId;
+                // Используем deviceId как userId для совместимости
+                this.userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 this.isConnected = true;
                 
-                console.log('⚠️ Работаем в ограниченном режиме (без аутентификации)');
+                console.log('⚠️ Используем временный User ID:', this.userId);
                 return true;
             }
             
@@ -88,33 +83,38 @@ class FirebaseSync {
         try {
             console.log('🔄 Начинаем синхронизацию контрагентов...');
             
-            // Используем простую коллекцию
-            const collectionName = this.collections.contractors;
-            console.log('📁 Используем коллекцию:', collectionName);
+            // Путь к данным: users/{userId}/qr_scanner_production_v1/contractors
+            const userDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId);
+            const contractorsCollectionRef = userDocRef.collection('qr_scanner_production_v1').doc('contractors');
+            
+            console.log('📁 Полный путь:', `${this.baseCollectionPath}/${this.userId}/qr_scanner_production_v1/contractors`);
             
             // Получаем данные из Firebase
             let cloudContractors = [];
             try {
-                const snapshot = await this.db.collection(collectionName).get();
-                snapshot.forEach(doc => {
+                const doc = await contractorsCollectionRef.get();
+                if (doc.exists) {
                     const data = doc.data();
-                    // Фильтруем по deviceId
-                    if (data.deviceId === this.deviceId) {
-                        cloudContractors.push(data);
+                    if (data.contractors && Array.isArray(data.contractors)) {
+                        cloudContractors = data.contractors;
+                        console.log(`📊 Найдено ${cloudContractors.length} контрагентов в облаке`);
+                    } else {
+                        console.log('ℹ️ Нет данных контрагентов в облаке');
                     }
-                });
-                console.log(`📊 Найдено ${cloudContractors.length} контрагентов в облаке (для этого устройства)`);
+                } else {
+                    console.log('ℹ️ Документ контрагентов не существует в облаке');
+                }
             } catch (firestoreError) {
                 console.error('❌ Ошибка чтения из Firestore:', firestoreError);
-                // Продолжаем с локальными данными
-                return localContractors;
+                // Создаем новый документ
+                console.log('🆕 Создаем новый документ для контрагентов...');
             }
             
             // Объединяем данные
-            const mergedContractors = this.mergeData(localContractors, cloudContractors);
+            const mergedContractors = this.mergeContractorsData(localContractors, cloudContractors);
             
             // Сохраняем обратно в Firebase
-            await this.saveContractorsToFirebase(mergedContractors);
+            await this.saveContractorsToFirebase(mergedContractors, contractorsCollectionRef);
             
             console.log(`✅ Синхронизация завершена. Итог: ${mergedContractors.length} контрагентов`);
             return mergedContractors;
@@ -125,88 +125,152 @@ class FirebaseSync {
         }
     }
     
-    mergeData(localData, cloudData) {
-        const merged = [...localData];
-        const cloudMap = new Map();
+    mergeContractorsData(localData, cloudData) {
+        console.log('🔄 Объединение данных...');
+        console.log(`📱 Локальные: ${localData.length}, ☁️ Облачные: ${cloudData.length}`);
         
-        // Создаем карту облачных данных
-        cloudData.forEach(item => {
-            cloudMap.set(item.id, item);
+        // Создаем карту для быстрого поиска
+        const mergedMap = new Map();
+        
+        // Сначала добавляем облачные данные
+        cloudData.forEach(cloudItem => {
+            mergedMap.set(cloudItem.id, { ...cloudItem, source: 'cloud' });
         });
         
-        // Объединяем данные
+        // Затем добавляем/обновляем локальными данными
         localData.forEach(localItem => {
-            const cloudItem = cloudMap.get(localItem.id);
+            const cloudItem = mergedMap.get(localItem.id);
             
             if (cloudItem) {
-                // Если есть в облаке, используем более новую версию
+                // Сравниваем даты обновления - берем более новую версию
                 const localDate = new Date(localItem.updatedAt || localItem.createdAt);
                 const cloudDate = new Date(cloudItem.updatedAt || cloudItem.createdAt);
                 
-                if (cloudDate > localDate) {
-                    // Находим индекс и обновляем
-                    const index = merged.findIndex(item => item.id === localItem.id);
-                    if (index !== -1) {
-                        merged[index] = cloudItem;
-                    }
+                if (localDate > cloudDate) {
+                    // Локальные данные новее
+                    mergedMap.set(localItem.id, { ...localItem, source: 'local', deviceId: this.deviceId });
                 }
-                // Удаляем из карты, чтобы не добавлять повторно
-                cloudMap.delete(localItem.id);
+                // Иначе оставляем облачные данные
+            } else {
+                // Новый контрагент из локальных данных
+                mergedMap.set(localItem.id, { ...localItem, source: 'local', deviceId: this.deviceId });
             }
         });
         
-        // Добавляем оставшиеся облачные данные
-        cloudMap.forEach(item => {
-            merged.push(item);
-        });
+        // Преобразуем обратно в массив
+        const merged = Array.from(mergedMap.values()).map(({ source, ...item }) => item);
         
+        console.log(`📊 После объединения: ${merged.length} контрагентов`);
         return merged;
     }
     
-    async saveContractorsToFirebase(contractors) {
+    async saveContractorsToFirebase(contractors, contractorsCollectionRef) {
         if (!this.isConnected || !this.db) {
             console.log('ℹ️ Не могу сохранить в Firebase: нет подключения');
             return;
         }
         
         try {
-            const collectionName = this.collections.contractors;
-            const batch = this.db.batch();
-            let savedCount = 0;
+            console.log(`💾 Сохраняем ${contractors.length} контрагентов в Firebase...`);
             
-            // Сохраняем только контрагенты этого устройства
-            const myContractors = contractors.filter(c => c.deviceId === this.deviceId);
+            // Обновляем метаданные пользователя
+            const userDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId);
+            await userDocRef.set({
+                userId: this.userId,
+                deviceId: this.deviceId,
+                lastActivity: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                version: '1.0'
+            }, { merge: true });
             
-            console.log(`💾 Сохраняем ${myContractors.length} контрагентов в Firebase...`);
+            console.log('✅ Метаданные пользователя обновлены');
             
-            myContractors.forEach(contractor => {
-                const docId = `${this.deviceId}_${contractor.id}`;
-                const docRef = this.db.collection(collectionName).doc(docId);
-                
-                const data = {
-                    ...contractor,
-                    _deviceId: this.deviceId,
-                    _userId: this.userId,
-                    _syncedAt: new Date().toISOString(),
-                    _updatedAt: new Date().toISOString()
-                };
-                
-                batch.set(docRef, data, { merge: true });
-                savedCount++;
-            });
+            // Сохраняем контрагенты
+            await contractorsCollectionRef.set({
+                contractors: contractors,
+                count: contractors.length,
+                lastSync: new Date().toISOString(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                deviceId: this.deviceId,
+                userId: this.userId
+            }, { merge: true });
             
-            // Ограничиваем batch размером 500 операций
-            if (savedCount > 0) {
-                await batch.commit();
-                console.log(`✅ Сохранено ${savedCount} контрагентов в Firebase`);
-                
-                // Обновляем время последней синхронизации
-                localStorage.setItem('honest_sign_last_sync', new Date().toISOString());
-            }
+            console.log(`✅ Сохранено ${contractors.length} контрагентов в Firebase`);
+            
+            // Обновляем время последней синхронизации
+            localStorage.setItem('honest_sign_last_sync', new Date().toISOString());
+            console.log('🕐 Время синхронизации обновлено');
             
         } catch (error) {
             console.error('❌ Ошибка сохранения в Firebase:', error);
         }
+    }
+    
+    async syncReports(localReports) {
+        if (!this.isConnected) {
+            console.log('ℹ️ FirebaseSync не подключен, пропускаем синхронизацию отчетов');
+            return localReports;
+        }
+        
+        try {
+            console.log('🔄 Синхронизация отчетов...');
+            
+            // Путь к данным: users/{userId}/qr_scanner_production_v1/reports
+            const userDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId);
+            const reportsCollectionRef = userDocRef.collection('qr_scanner_production_v1').doc('reports');
+            
+            // Получаем данные из Firebase
+            let cloudReports = [];
+            try {
+                const doc = await reportsCollectionRef.get();
+                if (doc.exists) {
+                    const data = doc.data();
+                    if (data.reports && Array.isArray(data.reports)) {
+                        cloudReports = data.reports;
+                        console.log(`📊 Найдено ${cloudReports.length} отчетов в облаке`);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Ошибка чтения отчетов из Firestore:', error);
+            }
+            
+            // Объединяем данные
+            const mergedReports = this.mergeReportsData(localReports, cloudReports);
+            
+            // Сохраняем обратно в Firebase
+            await reportsCollectionRef.set({
+                reports: mergedReports,
+                count: mergedReports.length,
+                lastSync: new Date().toISOString(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                deviceId: this.deviceId
+            }, { merge: true });
+            
+            console.log(`✅ Синхронизация отчетов завершена: ${mergedReports.length} отчетов`);
+            return mergedReports;
+            
+        } catch (error) {
+            console.error('❌ Ошибка синхронизации отчетов:', error);
+            return localReports;
+        }
+    }
+    
+    mergeReportsData(localData, cloudData) {
+        const merged = [...localData];
+        const cloudMap = new Map();
+        
+        // Создаем карту облачных отчетов
+        cloudData.forEach(report => cloudMap.set(report.id, report));
+        
+        // Добавляем облачные отчеты, которых нет локально
+        cloudData.forEach(cloudReport => {
+            const exists = merged.some(localReport => localReport.id === cloudReport.id);
+            if (!exists) {
+                merged.push(cloudReport);
+            }
+        });
+        
+        return merged;
     }
     
     async testConnection() {
@@ -218,12 +282,22 @@ class FirebaseSync {
                 return false;
             }
             
-            // Пробуем простую операцию чтения
-            const testDoc = await this.db.collection('_test_connection')
-                .doc('test')
-                .get();
+            // Пробуем простую операцию чтения/записи
+            const testDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId);
             
-            console.log('✅ Подключение к Firebase работает');
+            // Читаем
+            const doc = await testDocRef.get();
+            console.log('✅ Чтение из Firebase работает');
+            
+            // Пишем
+            await testDocRef.set({
+                test: true,
+                timestamp: new Date().toISOString(),
+                deviceId: this.deviceId
+            }, { merge: true });
+            console.log('✅ Запись в Firebase работает');
+            
+            console.log('✅ Полный тест подключения пройден');
             return true;
             
         } catch (error) {
@@ -239,35 +313,36 @@ class FirebaseSync {
         }
         
         try {
-            console.log('🚀 Принудительная синхронизация...');
-            showInfo('🔄 Синхронизация с облаком...', 3000);
+            console.log('🚀 Принудительная синхронизация всех данных...');
             
-            // Синхронизируем контрагентов
+            // 1. Синхронизируем контрагентов
             const contractors = this.appState.getAllContractors();
             const syncedContractors = await this.syncContractors(contractors);
             
             if (syncedContractors && syncedContractors.length > 0) {
-                // Обновляем в AppState
                 this.appState.contractors = syncedContractors;
                 this.appState.saveContractors();
-                
-                console.log(`✅ Синхронизация завершена: ${syncedContractors.length} контрагентов`);
-                
-                // Обновляем UI
-                if (window.scannerManager && window.scannerManager.updateSyncUI) {
-                    window.scannerManager.updateSyncUI();
-                }
-                
-                showSuccess(`✅ Синхронизировано ${syncedContractors.length} контрагентов`, 3000);
-                return true;
+                console.log(`✅ Контрагенты синхронизированы: ${syncedContractors.length}`);
             }
             
-            showWarning('⚠️ Нет данных для синхронизации', 3000);
-            return false;
+            // 2. Синхронизируем отчеты
+            const reports = this.appState.getAllReports();
+            const syncedReports = await this.syncReports(reports);
+            
+            if (syncedReports && syncedReports.length > 0) {
+                this.appState.reports = syncedReports;
+                this.appState.saveReports();
+                console.log(`✅ Отчеты синхронизированы: ${syncedReports.length}`);
+            }
+            
+            // 3. Обновляем время синхронизации
+            localStorage.setItem('honest_sign_last_sync', new Date().toISOString());
+            
+            console.log('✅ Полная синхронизация завершена');
+            return true;
             
         } catch (error) {
             console.error('❌ Ошибка принудительной синхронизации:', error);
-            showError('Ошибка синхронизации: ' + error.message);
             return false;
         }
     }
@@ -277,7 +352,8 @@ class FirebaseSync {
             isConnected: this.isConnected,
             userId: this.userId,
             deviceId: this.deviceId,
-            lastSync: localStorage.getItem('honest_sign_last_sync')
+            lastSync: localStorage.getItem('honest_sign_last_sync'),
+            basePath: `${this.baseCollectionPath}/${this.userId}/qr_scanner_production_v1`
         };
     }
 }
