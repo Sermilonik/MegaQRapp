@@ -8,10 +8,10 @@ class ScannerManager {
             console.log('⚠️ ScannerManager уже существует');
             return window.scannerManager;
         }
-
+        
         // Сохраняем глобальную ссылку
         window.scannerManager = this;
-
+        
         // Инициализируем свойства
         this.scanner = null;
         this.isScanning = false;
@@ -20,16 +20,38 @@ class ScannerManager {
         this._stopInProgress = false;
         this.apkMode = false;
         
-        // Проверяем AppState
+        // Получаем AppState (может быть еще не инициализирован)
         this.appState = window.appState;
-        console.log('AppState доступен:', this.appState !== null);
-
+        console.log('📊 AppState доступен:', !!this.appState);
+        
         // Запускаем инициализацию
         this.init();
     }
 
     async init() {
         console.log('🔧 Инициализация ScannerManager');
+
+            // Ждем инициализации AppState если нужно
+    if (!this.appState || !this.appState.isInitialized) {
+        console.log('⏳ Ожидаем инициализацию AppState...');
+        await new Promise(resolve => {
+            const checkInterval = setInterval(() => {
+                if (window.appState && window.appState.isInitialized) {
+                    clearInterval(checkInterval);
+                    this.appState = window.appState;
+                    console.log('✅ AppState готов');
+                    resolve();
+                }
+            }, 100);
+            
+            // Таймаут
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                console.log('⚠️ Таймаут ожидания AppState');
+                resolve();
+            }, 5000);
+        });
+    }
         
         // Проверяем APK режим
         this.optimizeForAPK();
