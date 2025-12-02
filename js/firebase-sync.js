@@ -211,14 +211,17 @@ class FirebaseSync {
         try {
             console.log('🔄 Синхронизация контрагентов...');
             
-            // 1. Сначала синхронизируем со всеми пользователями
+            // 1. Получаем контрагентов со всех пользователей
             const allUsersContractors = await this.syncWithAllUsers(localContractors);
             
-            // 2. Сохраняем свои контрагенты
-            await this.saveMyContractors(allUsersContractors);
+            // 2. Фильтруем удаленных
+            const filteredContractors = await this.filterDeletedContractors(allUsersContractors);
             
-            console.log(`✅ Синхронизация завершена. Итог: ${allUsersContractors.length} контрагентов`);
-            return allUsersContractors;
+            // 3. Сохраняем свои контрагенты
+            await this.saveMyContractors(filteredContractors);
+            
+            console.log(`✅ Синхронизация завершена. Итог: ${filteredContractors.length} контрагентов`);
+            return filteredContractors;
             
         } catch (error) {
             console.error('❌ Ошибка синхронизации контрагентов:', error);
@@ -226,6 +229,195 @@ class FirebaseSync {
         }
     }
     
+    async filterDeletedContractors(contractors) {
+        try {
+            console.log('🗑️ Фильтрация удаленных контрагентов...');
+            
+            // Получаем список удаленных контрагентов
+            const deletedContractors = await this.getDeletedContractors();
+            
+            if (deletedContractors.length === 0) {
+                console.log('ℹ️ Удаленных контрагентов нет');
+                return contractors;
+            }
+            
+            // Фильтруем удаленных
+            const deletedIds = new Set(deletedContractors.map(c => c.id));
+            const filtered = contractors.filter(contractor => !deletedIds.has(contractor.id));
+            
+            console.log(`✅ Удалено ${deletedContractors.length} контрагентов из синхронизации`);
+            return filtered;
+            
+        } catch (error) {
+            console.error('❌ Ошибка фильтрации удаленных контрагентов:', error);
+            return contractors;
+        }
+    }
+    
+    async getDeletedContractors() {
+        try {
+            console.log('🔍 Получение списка удаленных контрагентов...');
+            
+            const deletedDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId)
+                .collection('qr_scanner_production_v1').doc('deleted_contractors');
+            
+            const doc = await deletedDocRef.get();
+            if (doc.exists) {
+                const data = doc.data();
+                const deleted = data.contractors || [];
+                console.log(`📊 Найдено ${deleted.length} удаленных контрагентов`);
+                return deleted;
+            }
+            
+            return [];
+            
+        } catch (error) {
+            console.error('❌ Ошибка получения удаленных контрагентов:', error);
+            return [];
+        }
+    }
+    
+    async markContractorAsDeleted(contractor) {
+        if (!this.isConnected || !this.db) {
+            console.log('ℹ️ Firebase не подключен, удаление локальное');
+            return false;
+        }
+        
+        try {
+            console.log(`🗑️ Помечаем контрагента как удаленного: ${contractor.name}`);
+            
+            const deletedDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId)
+                .collection('qr_scanner_production_v1').doc('deleted_contractors');
+            
+            // Получаем текущий список удаленных
+            const doc = await deletedDocRef.get();
+            let deletedContractors = [];
+            
+            if (doc.exists) {
+                const data = doc.data();
+                deletedContractors = data.contractors || [];
+            }
+            
+            // Добавляем нового удаленного (только если его еще нет)
+            const exists = deletedContractors.some(c => c.id === contractor.id);
+            if (!exists) {
+                deletedContractors.push({
+                    ...contractor,
+                    deletedAt: new Date().toISOString(),
+                    deletedBy: this.deviceId,
+                    deletedReason: 'user_action'
+                });
+                
+                // Сохраняем обновленный список
+                await deletedDocRef.set({
+                    contractors: deletedContractors,
+                    count: deletedContractors.length,
+                    lastUpdate: new Date().toISOString(),
+                    deviceId: this.deviceId
+                }, { merge: true });
+                
+                console.log(`✅ Контрагент "${contractor.name}" помечен как удаленный`);
+                return true;
+            }
+            
+            console.log(`ℹ️ Контрагент "${contractor.name}" уже помечен как удаленный`);
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Ошибка пометки контрагента как удаленного:', error);
+            return false;
+        }
+    }
+    
+    async syncDeletedContractors() {
+        try {
+            console.log('🔄 Синхронизация списков удаленных контрагентов...');
+            
+            // Получаем удаленных контрагентов от всех пользователей
+            const allUsers = await this.getAllUsers();
+            const allDeleted = [];
+            
+            for (const user of allUsers) {
+                if (user.id === this.userId) continue;
+                
+                const userDeleted = await this.getUserDeletedContractors(user.id);
+                console.log(`👤 Пользователь ${user.id.substring(0, 10)}...: ${userDeleted.length} удаленных`);
+                
+                // Добавляем удаленные контрагенты от других пользователей
+                allDeleted.push(...userDeleted);
+            }
+            
+            // Объединяем со своими удаленными
+            const myDeleted = await this.getDeletedContractors();
+            const mergedDeleted = this.mergeDeletedContractors(myDeleted, allDeleted);
+            
+            // Сохраняем объединенный список
+            await this.saveDeletedContractors(mergedDeleted);
+            
+            console.log(`📊 Общий список удаленных: ${mergedDeleted.length} контрагентов`);
+            return mergedDeleted;
+            
+        } catch (error) {
+            console.error('❌ Ошибка синхронизации удаленных контрагентов:', error);
+            return [];
+        }
+    }
+    
+    async getUserDeletedContractors(userId) {
+        try {
+            const deletedDocRef = this.db.collection(this.baseCollectionPath).doc(userId)
+                .collection('qr_scanner_production_v1').doc('deleted_contractors');
+            
+            const doc = await deletedDocRef.get();
+            if (doc.exists) {
+                const data = doc.data();
+                return data.contractors || [];
+            }
+            return [];
+            
+        } catch (error) {
+            console.error(`❌ Ошибка получения удаленных контрагентов пользователя ${userId}:`, error);
+            return [];
+        }
+    }
+    
+    mergeDeletedContractors(myDeleted, otherDeleted) {
+        const merged = [...myDeleted];
+        const myIds = new Set(myDeleted.map(c => c.id));
+        
+        // Добавляем удаленные от других пользователей, которых нет у нас
+        otherDeleted.forEach(deleted => {
+            if (!myIds.has(deleted.id)) {
+                merged.push(deleted);
+                myIds.add(deleted.id);
+            }
+        });
+        
+        return merged;
+    }
+    
+    async saveDeletedContractors(deletedContractors) {
+        if (!this.isConnected || !this.db) return;
+        
+        try {
+            const deletedDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId)
+                .collection('qr_scanner_production_v1').doc('deleted_contractors');
+            
+            await deletedDocRef.set({
+                contractors: deletedContractors,
+                count: deletedContractors.length,
+                lastSync: new Date().toISOString(),
+                deviceId: this.deviceId,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+            
+            console.log(`✅ Сохранено ${deletedContractors.length} удаленных контрагентов`);
+            
+        } catch (error) {
+            console.error('❌ Ошибка сохранения удаленных контрагентов:', error);
+        }
+    }
+
     async saveMyContractors(contractors) {
         if (!this.isConnected || !this.db) return;
         
@@ -391,7 +583,10 @@ class FirebaseSync {
         try {
             console.log('🚀 Принудительная синхронизация всех данных...');
             
-            // 1. Синхронизируем контрагентов со всеми пользователями
+            // 0. Сначала синхронизируем списки удаленных
+            await this.syncDeletedContractors();
+            
+            // 1. Синхронизируем контрагентов
             const contractors = this.appState.getAllContractors();
             const syncedContractors = await this.syncContractors(contractors);
             
@@ -419,6 +614,83 @@ class FirebaseSync {
             
         } catch (error) {
             console.error('❌ Ошибка принудительной синхронизации:', error);
+            return false;
+        }
+    }
+
+    async clearDeletedContractorsList() {
+        if (!this.isConnected || !this.db) {
+            console.log('ℹ️ Firebase не подключен');
+            return false;
+        }
+        
+        try {
+            console.log('🧹 Очистка списка удаленных контрагентов...');
+            
+            const deletedDocRef = this.db.collection(this.baseCollectionPath).doc(this.userId)
+                .collection('qr_scanner_production_v1').doc('deleted_contractors');
+            
+            // Удаляем документ с удаленными контрагентами
+            await deletedDocRef.delete();
+            
+            console.log('✅ Список удаленных контрагентов очищен');
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Ошибка очистки списка удаленных контрагентов:', error);
+            return false;
+        }
+    }
+    
+    async forceDeleteContractor(contractorId) {
+        if (!this.isConnected || !this.db) {
+            console.log('ℹ️ Firebase не подключен');
+            return false;
+        }
+        
+        try {
+            console.log(`🗑️ Принудительное удаление контрагента ID: ${contractorId}`);
+            
+            // Удаляем контрагента из всех пользователей
+            const allUsers = await this.getAllUsers();
+            let deletedCount = 0;
+            
+            for (const user of allUsers) {
+                try {
+                    const userDocRef = this.db.collection(this.baseCollectionPath).doc(user.id);
+                    const contractorsDocRef = userDocRef.collection('qr_scanner_production_v1').doc('contractors');
+                    
+                    // Получаем контрагентов пользователя
+                    const doc = await contractorsDocRef.get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        if (data.contractors && Array.isArray(data.contractors)) {
+                            // Фильтруем удаляемого контрагента
+                            const filtered = data.contractors.filter(c => c.id !== contractorId);
+                            
+                            if (filtered.length !== data.contractors.length) {
+                                // Сохраняем обновленный список
+                                await contractorsDocRef.set({
+                                    contractors: filtered,
+                                    count: filtered.length,
+                                    lastUpdate: new Date().toISOString()
+                                }, { merge: true });
+                                
+                                deletedCount++;
+                                console.log(`✅ Удален у пользователя ${user.id.substring(0, 10)}...`);
+                            }
+                        }
+                    }
+                } catch (userError) {
+                    console.error(`❌ Ошибка удаления у пользователя ${user.id}:`, userError);
+                }
+            }
+            
+            console.log(`✅ Принудительно удален контрагент ID:${contractorId} у ${deletedCount} пользователей`);
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Ошибка принудительного удаления контрагента:', error);
             return false;
         }
     }
