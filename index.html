@@ -53,29 +53,6 @@
                     👥 Управление контрагентами
                 </button>
             </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h3>🗑️ Управление удаленными контрагентами</h3>
-                </div>
-                
-                <div class="sync-actions">
-                    <button class="btn btn-warning" id="syncDeletedBtn">
-                        🔄 Синхронизировать удаленные
-                    </button>
-                    <button class="btn btn-danger" id="clearDeletedBtn">
-                        🧹 Очистить список удаленных
-                    </button>
-                    <button class="btn btn-info" id="showDeletedBtn">
-                        👁️ Показать удаленных
-                    </button>
-                </div>
-                
-                <div id="deletedInfo" style="margin-top: 15px; font-size: 12px; color: #666;">
-                    <div>🗑️ Удалено контрагентов: <span id="deletedCount">0</span></div>
-                    <div>🕐 Последнее обновление: <span id="deletedLastUpdate">-</span></div>
-                </div>
-            </div>
         
             <div id="selectedContractors" class="selected-contractors hidden">
                 <div class="selected-header">
@@ -223,9 +200,6 @@
                 <button class="btn btn-success" id="forceSyncBtn">
                     🔄 Синхронизировать
                 </button>
-                <button class="btn btn-danger" id="applyDeletedBtn">
-                    🗑️ Применить удаленные сейчас
-                </button>
                 <button class="btn btn-info" id="testSyncBtn" style="margin-top: 10px;">
                     🧪 Тест синхронизации
                 </button>
@@ -360,57 +334,6 @@
                 }
             }, 1000);
         });
-    </script>
-
-<script>
-    // Код для отладки кнопок управления контрагентами
-    document.addEventListener('DOMContentLoaded', function() {
-        // Проверяем все кнопки управления контрагентами
-        const contractorButtons = [
-            'addManualContractorBtn',
-            'importContractorsBtn',
-            'showContractorManagerBtn',
-            'clearContractors',
-            'hideContractorManagerBtn',
-            'hideAddContractorFormBtn',
-            'addContractorBtn',
-            'importContractorsBtn2',
-            'hideImportFormBtn',
-            'showAddContractorFormBtn',
-            'showImportFormBtn'
-        ];
-        
-        // Проверяем, какие кнопки существуют в DOM
-        setTimeout(() => {
-            console.log('🔍 Проверка кнопок управления контрагентами:');
-            contractorButtons.forEach(btnId => {
-                const btn = document.getElementById(btnId);
-                console.log(`${btn ? '✅' : '❌'} ${btnId}: ${btn ? 'найдена' : 'не найдена'}`);
-            });
-            
-            // Проверяем модальные окна
-            console.log('🔍 Проверка модальных окон:');
-            const contractorManager = document.getElementById('contractorManager');
-            console.log(`Менеджер контрагентов: ${contractorManager ? 'найден' : 'не найден'}`);
-            
-            // Если ScannerManager еще не инициализирован, показываем сообщение
-            if (!window.scannerManager) {
-                console.warn('⚠️ ScannerManager еще не инициализирован');
-                const scannerSection = document.querySelector('#scannerSection');
-                if (scannerSection) {
-                    scannerSection.innerHTML = `
-                        <div class="alert alert-warning">
-                            <h4>Ожидание инициализации</h4>
-                            <p>ScannerManager загружается...</p>
-                            <button onclick="location.reload()" class="btn btn-sm btn-primary">
-                                Обновить страницу
-                            </button>
-                        </div>
-                    `;
-                }
-            }
-        }, 1000);
-    });
     </script>
 </body>
 </html>
