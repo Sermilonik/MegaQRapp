@@ -192,6 +192,47 @@ class AppState {
             console.error('❌ Ошибка инициализации Firebase:', error);
         }
     }
+
+    // тестирование firebase
+    async testFirebaseSync() {
+        console.log('🧪 Тест синхронизации Firebase...');
+        
+        if (!this.firebaseSync) {
+            console.log('❌ FirebaseSync не инициализирован');
+            return false;
+        }
+        
+        try {
+            // Тест подключения
+            const connected = await this.firebaseSync.testConnection();
+            
+            if (connected) {
+                console.log('✅ Firebase подключен и работает');
+                
+                // Тест синхронизации
+                const testContractors = [
+                    {
+                        id: 999,
+                        name: 'ТЕСТ Контрагент',
+                        category: 'Тестовая категория',
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        deviceId: this.deviceId
+                    }
+                ];
+                
+                const result = await this.firebaseSync.syncContractors(testContractors);
+                console.log('✅ Тест синхронизации пройден:', result.length, 'контрагентов');
+                return true;
+            } else {
+                console.log('❌ Firebase не подключен');
+                return false;
+            }
+        } catch (error) {
+            console.error('❌ Тест синхронизации не пройден:', error);
+            return false;
+        }
+    }
     
     async syncWithFirebase() {
         if (!this.firebaseSync) {
