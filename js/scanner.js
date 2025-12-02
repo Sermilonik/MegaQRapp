@@ -1,4 +1,4 @@
-// scanner.js
+// scanner.js - УПРОЩЕННАЯ И СТАБИЛЬНАЯ ВЕРСИЯ
 class ScannerManager {
     constructor() {
         console.log('🚀 Создание ScannerManager');
@@ -20,7 +20,7 @@ class ScannerManager {
         this._stopInProgress = false;
         this.apkMode = false;
         
-        // Получаем AppState (может быть еще не инициализирован)
+        // Получаем AppState
         this.appState = window.appState;
         console.log('📊 AppState доступен:', !!this.appState);
         
@@ -30,28 +30,6 @@ class ScannerManager {
 
     async init() {
         console.log('🔧 Инициализация ScannerManager');
-
-            // Ждем инициализации AppState если нужно
-    if (!this.appState || !this.appState.isInitialized) {
-        console.log('⏳ Ожидаем инициализацию AppState...');
-        await new Promise(resolve => {
-            const checkInterval = setInterval(() => {
-                if (window.appState && window.appState.isInitialized) {
-                    clearInterval(checkInterval);
-                    this.appState = window.appState;
-                    console.log('✅ AppState готов');
-                    resolve();
-                }
-            }, 100);
-            
-            // Таймаут
-            setTimeout(() => {
-                clearInterval(checkInterval);
-                console.log('⚠️ Таймаут ожидания AppState');
-                resolve();
-            }, 5000);
-        });
-    }
         
         // Проверяем APK режим
         this.optimizeForAPK();
@@ -81,52 +59,10 @@ class ScannerManager {
         setInterval(() => {
             this.updateSyncUI();
             console.log('🔄 Периодическое обновление статуса синхронизации');
-        }, 30000); // каждые 30 секунд
-        
-        // Также обновляем статус синхронизации при изменении данных
-        this.setupSyncDataListeners();
+        }, 30000);
         
         console.log('✅ ScannerManager инициализирован');
         showSuccess('Складской модуль готов к работе', 2000);
-    }
-
-    setupSyncDataListeners() {
-        console.log('🔧 Настройка слушателей данных синхронизации...');
-        
-        // Слушаем изменения в localStorage для синхронизации
-        window.addEventListener('storage', (event) => {
-            if (event.key === 'honest_sign_contractors' || 
-                event.key === 'honest_sign_session' ||
-                event.key === 'honest_sign_reports') {
-                
-                console.log('📡 Обнаружено изменение в localStorage:', event.key);
-                
-                // Обновляем соответствующие данные
-                if (event.key === 'honest_sign_contractors') {
-                    this.loadContractors();
-                    console.log('🔄 Контрагенты перезагружены из localStorage');
-                }
-                
-                // Обновляем UI синхронизации
-                this.updateSyncUI();
-            }
-        });
-        
-        // Также обновляем UI при изменении выбранных контрагентов
-        const originalUpdateSelectedContractorsUI = this.updateSelectedContractorsUI.bind(this);
-        this.updateSelectedContractorsUI = () => {
-            originalUpdateSelectedContractorsUI();
-            this.updateSyncUI(); // Обновляем статус синхронизации
-        };
-        
-        // И при обновлении UI
-        const originalUpdateUI = this.updateUI.bind(this);
-        this.updateUI = () => {
-            originalUpdateUI();
-            this.updateSyncUI(); // Обновляем статус синхронизации
-        };
-        
-        console.log('✅ Слушатели данных синхронизации настроены');
     }
 
     optimizeForAPK() {
@@ -147,12 +83,7 @@ class ScannerManager {
         if (this.apkMode) {
             console.log('🎯 Применение оптимизаций для APK...');
             
-            // Можно добавить специфичные оптимизации:
-            // - Упрощенный UI
-            // - Кэширование ресурсов
-            // - Оптимизация производительности
-            
-            // Пример: скрыть сложные элементы
+            // Упрощенный UI для APK
             const complexElements = document.querySelectorAll('.desktop-only, .advanced-feature');
             complexElements.forEach(el => {
                 el.style.display = 'none';
@@ -694,7 +625,7 @@ class ScannerManager {
         
         // Сохраняем
         session.scannedCodes.push(scannedCode);
-        this.saveSession(session); // Теперь этот метод существует
+        this.saveSession(session);
         
         this.addCodeToList(scannedCode);
         this.updateUI();
@@ -713,26 +644,6 @@ class ScannerManager {
         if (navigator.vibrate) {
             navigator.vibrate(200);
         }
-    }
-
-    checkReportRequirements() {
-        const session = this.getCurrentSession();
-        const codesCount = session.scannedCodes.length;
-        const contractorsCount = this.selectedContractors.length;
-        
-        console.log('📋 Проверка требований для отчета:');
-        console.log(`1. Контрагенты выбраны: ${contractorsCount > 0 ? '✅' : '❌'} (${contractorsCount})`);
-        console.log(`2. Коды отсканированы: ${codesCount > 0 ? '✅' : '❌'} (${codesCount})`);
-        console.log(`3. Кодов достаточно: ${codesCount >= contractorsCount ? '✅' : '❌'} (${codesCount} ≥ ${contractorsCount})`);
-        
-        const requirements = {
-            hasContractors: contractorsCount > 0,
-            hasCodes: codesCount > 0,
-            hasEnoughCodes: codesCount >= contractorsCount,
-            allMet: contractorsCount > 0 && codesCount > 0 && codesCount >= contractorsCount
-        };
-        
-        return requirements;
     }
 
     addCodeToList(scannedCode) {
@@ -1047,6 +958,51 @@ class ScannerManager {
             
         } catch (error) {
             console.error('❌ Ошибка обновления UI синхронизации:', error);
+        }
+    }
+    
+    // Простой fallback если AppState не доступен
+    updateSyncUIFallback() {
+        console.log('ℹ️ Используем fallback для UI синхронизации');
+        
+        const elements = {
+            syncStatus: document.getElementById('syncStatus'),
+            deviceId: document.getElementById('deviceId'),
+            userId: document.getElementById('userId'),
+            usersCount: document.getElementById('usersCount'),
+            lastSync: document.getElementById('lastSync'),
+            firebaseStatus: document.getElementById('firebaseStatus'),
+            firebasePath: document.getElementById('firebasePath')
+        };
+        
+        if (elements.syncStatus) {
+            elements.syncStatus.textContent = '❌ Оффлайн';
+            elements.syncStatus.className = 'badge badge-danger';
+        }
+        
+        if (elements.deviceId) {
+            elements.deviceId.textContent = 'локальный';
+        }
+        
+        if (elements.userId) {
+            elements.userId.textContent = 'не задан';
+        }
+        
+        if (elements.usersCount) {
+            elements.usersCount.textContent = '0';
+        }
+        
+        if (elements.lastSync) {
+            elements.lastSync.textContent = 'никогда';
+        }
+        
+        if (elements.firebaseStatus) {
+            elements.firebaseStatus.textContent = '❌ Отключено';
+            elements.firebaseStatus.style.color = '#dc3545';
+        }
+        
+        if (elements.firebasePath) {
+            elements.firebasePath.textContent = 'локальное хранилище';
         }
     }
 
@@ -1619,11 +1575,11 @@ class ScannerManager {
         this.setupButton('addManualContractorBtn', 'showAddContractorForm');
         this.setupButton('importContractorsBtn', 'showImportForm');
         this.setupButton('showContractorManagerBtn', 'showContractorManager');
+        this.setupButton('clearContractors', 'clearContractors');
         
         // Модальные окна
         this.setupButton('hideContractorManagerBtn', 'hideContractorManager');
         this.setupButton('hideAddContractorFormBtn', 'hideAddContractorForm');
-        this.setupButton('clearContractors', 'clearContractors');
         this.setupButton('addContractorBtn', 'addContractor');
         this.setupButton('showAddContractorFormBtn', 'showAddContractorForm');
         this.setupButton('showImportFormBtn', 'showImportForm');
@@ -1677,42 +1633,6 @@ class ScannerManager {
                 this[methodName]();
             });
         }
-    }
-
-    async testSyncConnection() {
-        console.log('🧪 Тест подключения синхронизации...');
-        
-        if (!window.appState) {
-            showError('AppState не доступен');
-            return;
-        }
-        
-        showInfo('🧪 Тестирование подключения...', 3000);
-        
-        try {
-            const success = await window.appState.testFirebaseSync();
-            
-            if (success) {
-                showSuccess('✅ Синхронизация работает!', 3000);
-            } else {
-                showError('❌ Проблемы с синхронизацией', 3000);
-            }
-            
-        } catch (error) {
-            console.error('❌ Ошибка теста синхронизации:', error);
-            showError('Ошибка теста: ' + error.message);
-        }
-    }
-
-    forceSync() {
-        console.log('🔄 Принудительная синхронизация...');
-        showInfo('🔄 Синхронизация данных...', 3000);
-        
-        // Простая реализация - перезагрузка данных
-        this.loadContractors();
-        this.loadReportsList();
-        
-        showSuccess('Данные синхронизированы', 3000);
     }
 }
 
