@@ -893,53 +893,14 @@ class ScannerManager {
                 return;
             }
             
-            if (!window.appState.firebaseSync) {
-                // Обновляем UI даже если Firebase не доступен
-                const syncStatus = document.getElementById('syncStatus');
-                const firebaseStatus = document.getElementById('firebaseStatus');
-                const deviceId = document.getElementById('deviceId');
-                const autoSyncStatus = document.getElementById('autoSyncStatus');
-                const lastSync = document.getElementById('lastSync');
-                
-                if (syncStatus) {
-                    syncStatus.textContent = '❌ Не доступна';
-                    syncStatus.className = 'badge badge-danger';
-                }
-                
-                if (firebaseStatus) {
-                    firebaseStatus.textContent = '❌ Не подключено';
-                    firebaseStatus.style.color = '#dc3545';
-                }
-                
-                if (deviceId) {
-                    const localDeviceId = localStorage.getItem('honest_sign_device_id') || 'не задан';
-                    deviceId.textContent = localDeviceId.substring(0, 10) + '...';
-                }
-                
-                if (autoSyncStatus) {
-                    autoSyncStatus.textContent = '❌ Выключена';
-                    autoSyncStatus.style.color = '#dc3545';
-                }
-                
-                if (lastSync) {
-                    lastSync.textContent = 'никогда';
-                }
-                
-                return;
-            }
+            const status = window.appState.getSyncStatus();
+            const lastSync = localStorage.getItem('honest_sign_last_sync');
             
-            // Получаем статус синхронизации
-            const status = window.appState.firebaseSync.getSyncStatus();
-            
-            // Обновляем все элементы UI
+            // Обновляем элементы UI
             const elements = {
                 syncStatus: document.getElementById('syncStatus'),
-                firebaseStatus: document.getElementById('firebaseStatus'),
                 deviceId: document.getElementById('deviceId'),
-                autoSyncStatus: document.getElementById('autoSyncStatus'),
-                lastSync: document.getElementById('lastSync'),
-                toggleBtn: document.getElementById('toggleSyncBtn'),
-                forceSyncBtn: document.getElementById('forceSyncBtn')
+                lastSync: document.getElementById('lastSync')
             };
             
             // Статус синхронизации
@@ -956,12 +917,6 @@ class ScannerManager {
                 }
             }
             
-            // Статус Firebase
-            if (elements.firebaseStatus) {
-                elements.firebaseStatus.textContent = status.isConnected ? '✅ Подключено' : '❌ Ошибка';
-                elements.firebaseStatus.style.color = status.isConnected ? '#28a745' : '#dc3545';
-            }
-            
             // ID устройства
             if (elements.deviceId) {
                 elements.deviceId.textContent = status.deviceId ? 
@@ -969,40 +924,37 @@ class ScannerManager {
                     'не задан';
             }
             
-            // Статус автосинхронизации
-            if (elements.autoSyncStatus) {
-                elements.autoSyncStatus.textContent = status.syncEnabled ? '✅ Включена' : '❌ Выключена';
-                elements.autoSyncStatus.style.color = status.syncEnabled ? '#28a745' : '#dc3545';
-            }
-            
             // Последняя синхронизация
             if (elements.lastSync) {
-                elements.lastSync.textContent = status.lastSync ? 
-                    new Date(status.lastSync).toLocaleTimeString() : 
-                    'никогда';
+                if (lastSync) {
+                    const date = new Date(lastSync);
+                    elements.lastSync.textContent = 
+                        date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                } else {
+                    elements.lastSync.textContent = 'никогда';
+                }
             }
-            
-            // Кнопки
-            if (elements.toggleBtn) {
-                elements.toggleBtn.textContent = status.syncEnabled ? 
-                    '⏸️ Выключить автосинхронизацию' : 
-                    '⚡ Включить автосинхронизацию';
-                
-                elements.toggleBtn.disabled = !status.isConnected;
-            }
-            
-            if (elements.forceSyncBtn) {
-                elements.forceSyncBtn.disabled = !status.isConnected;
-            }
-            
-            console.log('🔄 UI синхронизации обновлен:', {
-                connected: status.isConnected,
-                syncEnabled: status.syncEnabled,
-                deviceId: status.deviceId?.substring(0, 10)
-            });
             
         } catch (error) {
             console.error('❌ Ошибка обновления UI синхронизации:', error);
+        }
+    }
+
+    async forceSync() {
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        showInfo('🔄 Принудительная синхронизация...', 3000);
+        
+        try {
+            await window.appState.syncWithFirebase();
+            this.updateSyncUI();
+            showSuccess('✅ Синхронизация завершена', 3000);
+        } catch (error) {
+            console.error('❌ Ошибка синхронизации:', error);
+            showError('Ошибка синхронизации: ' + error.message);
         }
     }
 
@@ -1404,6 +1356,7 @@ class ScannerManager {
         }
     }
 
+    //показываем выпадающий список
     showDropdown() {
         const dropdown = document.getElementById('contractorDropdown');
         if (dropdown) {
@@ -1411,6 +1364,7 @@ class ScannerManager {
         }
     }
 
+    //прячем
     hideDropdown() {
         const dropdown = document.getElementById('contractorDropdown');
         if (dropdown) {
@@ -1434,55 +1388,52 @@ class ScannerManager {
     }
 
     // СИНХРОНИЗАЦИЯ ДАННЫХ
+    //экспорт данных
     exportData() {
         if (!window.appState) {
             showError('AppState не доступен');
             return;
         }
         
-        const exportData = window.appState.exportForSync();
-        
-        // Создаем файл для скачивания
+        const exportData = window.appState.exportData();
         const blob = new Blob([exportData], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `contractors-backup-${new Date().toISOString().split('T')[0]}.json`;
+        a.download = `qr-scanner-backup-${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
         
         showSuccess('Данные экспортированы в файл', 3000);
     }
 
+    //импорт данных
     importData() {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.json,.csv';
+        input.accept = '.json';
         
-        input.onchange = (e) => {
+        input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
             
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = async (e) => {
                 const content = e.target.result;
                 
-                if (file.name.endsWith('.json')) {
-                    // Импорт JSON
-                    try {
-                        const data = JSON.parse(content);
-                        if (data.contractors) {
-                            this.allContractors = data.contractors;
-                            this.saveContractors();
-                            this.loadContractorsManagerList();
-                            showSuccess(`Импортировано ${this.allContractors.length} контрагентов`, 3000);
-                        }
-                    } catch (error) {
-                        showError('Ошибка импорта JSON: ' + error.message);
+                if (confirm('Импортировать данные? Текущие данные будут объединены с импортируемыми.')) {
+                    const success = await window.appState.importData(content);
+                    if (success) {
+                        // Перезагружаем данные
+                        this.loadContractors();
+                        this.loadReportsList();
+                        this.updateSyncUI();
+                        showSuccess('Данные успешно импортированы', 3000);
+                    } else {
+                        showError('Ошибка импорта данных');
                     }
-                } else if (file.name.endsWith('.csv')) {
-                    // Импорт CSV
-                    this.importContractorsFromCSV(content);
                 }
             };
             reader.readAsText(file);
@@ -1491,6 +1442,7 @@ class ScannerManager {
         input.click();
     }
 
+    //импорт форм
     importContractorsFromCSV(csvData) {
         const lines = csvData.trim().split('\n');
         let importedCount = 0;
