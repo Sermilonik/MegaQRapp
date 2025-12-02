@@ -1,42 +1,56 @@
-// app-state.js - ОДИН класс
+// app-state.js
 class AppState {
     constructor() {
-        this.contractors = [];
-        this.currentSession = null;
-        this.reports = [];
-        this.reportCounter = 1;
-        this.firebaseSync = null;
-        this.syncEnabled = true;
-        this.deviceId = this.generateDeviceId();
+        console.log('🚀 Создание AppState');
         
-        // Инициализируем
+        // Проверяем, не создан ли уже экземпляр
+        if (window.appState) {
+            console.log('⚠️ AppState уже существует, возвращаем существующий');
+            return window.appState;
+        }
+        
+        // Инициализируем свойства
+        this.contractors = [];
+        this.reports = [];
+        this.currentSession = null;
+        this.firebaseSync = null;
+        this.isInitialized = false;
+        this.deviceId = null;
+        
+        // Сохраняем глобальную ссылку
+        window.appState = this;
+        
+        // Начинаем инициализацию
         this.init();
     }
     
     async init() {
-        console.log('🚀 Инициализация AppState');
+        console.log('🔧 Инициализация AppState...');
         
-        // Загружаем данные
-        this.loadContractors();
-        this.loadSession();
-        this.loadReports();
-        this.loadSettings();
-        
-        // Генерируем ID устройства если нет
-        if (!this.deviceId) {
-            this.deviceId = this.generateDeviceId();
-            localStorage.setItem('honest_sign_device_id', this.deviceId);
+        try {
+            // 1. Генерируем/получаем ID устройства
+            this.deviceId = this.getOrCreateDeviceId();
+            console.log('📱 ID устройства:', this.deviceId);
+            
+            // 2. Загружаем данные из localStorage
+            this.loadAllData();
+            
+            // 3. Инициализируем Firebase
+            await this.initFirebase();
+            
+            // 4. Отмечаем как инициализированный
+            this.isInitialized = true;
+            
+            console.log('✅ AppState инициализирован');
+            console.log(`📊 Данные: ${this.contractors.length} контрагентов, ${this.reports.length} отчетов`);
+            
+        } catch (error) {
+            console.error('❌ Ошибка инициализации AppState:', error);
+            this.isInitialized = false;
         }
-        
-        // Инициализируем Firebase
-        await this.initFirebase();
-        
-        console.log('✅ AppState инициализирован');
-        console.log(`📊 Данные: ${this.contractors.length} контрагентов, ${this.reports.length} отчетов`);
     }
     
-    // Генерация ID устройства
-    generateDeviceId() {
+    getOrCreateDeviceId() {
         let deviceId = localStorage.getItem('honest_sign_device_id');
         if (!deviceId) {
             deviceId = 'device_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -45,21 +59,63 @@ class AppState {
         return deviceId;
     }
     
-    // Загрузка контрагентов
-    loadContractors() {
+    loadAllData() {
+        console.log('📂 Загрузка всех данных...');
+        
+        // Загружаем контрагентов
         try {
-            const saved = localStorage.getItem('honest_sign_contractors');
-            if (saved) {
-                this.contractors = JSON.parse(saved);
+            const savedContractors = localStorage.getItem('honest_sign_contractors');
+            if (savedContractors) {
+                this.contractors = JSON.parse(savedContractors);
                 console.log(`✅ Загружено ${this.contractors.length} контрагентов`);
             } else {
                 this.loadDefaultContractors();
-                console.log('ℹ️ Созданы контрагенты по умолчанию');
+                console.log('📝 Созданы контрагенты по умолчанию');
             }
         } catch (error) {
             console.error('❌ Ошибка загрузки контрагентов:', error);
             this.loadDefaultContractors();
         }
+        
+        // Загружаем сессию
+        try {
+            const savedSession = localStorage.getItem('honest_sign_session');
+            if (savedSession) {
+                this.currentSession = JSON.parse(savedSession);
+                console.log('✅ Сессия загружена');
+            } else {
+                this.currentSession = this.createNewSession();
+                console.log('🆕 Создана новая сессия');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка загрузки сессии:', error);
+            this.currentSession = this.createNewSession();
+        }
+        
+        // Загружаем отчеты
+        try {
+            const savedReports = localStorage.getItem('honest_sign_reports');
+            if (savedReports) {
+                this.reports = JSON.parse(savedReports);
+                console.log(`✅ Загружено ${this.reports.length} отчетов`);
+            } else {
+                this.reports = [];
+                console.log('ℹ️ Нет сохраненных отчетов');
+            }
+        } catch (error) {
+            console.error('❌ Ошибка загрузки отчетов:', error);
+            this.reports = [];
+        }
+    }
+    
+    createNewSession() {
+        return {
+            id: 'session_' + Date.now(),
+            scannedCodes: [],
+            selectedContractors: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
     }
     
     loadDefaultContractors() {
@@ -100,126 +156,46 @@ class AppState {
         this.saveContractors();
     }
     
-    // Загрузка сессии
-    loadSession() {
-        try {
-            const saved = localStorage.getItem('honest_sign_session');
-            if (saved) {
-                this.currentSession = JSON.parse(saved);
-            } else {
-                this.currentSession = {
-                    id: Date.now().toString(),
-                    scannedCodes: [],
-                    selectedContractors: [],
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-            }
-        } catch (error) {
-            console.error('❌ Ошибка загрузки сессии:', error);
-            this.currentSession = {
-                id: Date.now().toString(),
-                scannedCodes: [],
-                selectedContractors: [],
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-        }
-    }
-    
-    // Загрузка отчетов
-    loadReports() {
-        try {
-            const saved = localStorage.getItem('honest_sign_reports');
-            if (saved) {
-                this.reports = JSON.parse(saved);
-            } else {
-                this.reports = [];
-            }
-        } catch (error) {
-            console.error('❌ Ошибка загрузки отчетов:', error);
-            this.reports = [];
-        }
-    }
-    
-    // Загрузка настроек
-    loadSettings() {
-        try {
-            const syncEnabled = localStorage.getItem('honest_sign_sync_enabled');
-            if (syncEnabled !== null) {
-                this.syncEnabled = syncEnabled === 'true';
-            }
-        } catch (error) {
-            console.error('❌ Ошибка загрузки настроек:', error);
-        }
-    }
-    
-    // Сохранение контрагентов
-    saveContractors() {
-        try {
-            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.contractors));
-        } catch (error) {
-            console.error('❌ Ошибка сохранения контрагентов:', error);
-        }
-    }
-    
-    // Сохранение сессии
-    saveSession(session = null) {
-        try {
-            if (session) {
-                this.currentSession = session;
-            }
-            localStorage.setItem('honest_sign_session', JSON.stringify(this.currentSession));
-        } catch (error) {
-            console.error('❌ Ошибка сохранения сессии:', error);
-        }
-    }
-    
-    // Сохранение отчетов
-    saveReports() {
-        try {
-            localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
-        } catch (error) {
-            console.error('❌ Ошибка сохранения отчетов:', error);
-        }
-    }
-    
-    // Сохранение настроек
-    saveSettings() {
-        try {
-            localStorage.setItem('honest_sign_sync_enabled', this.syncEnabled.toString());
-        } catch (error) {
-            console.error('❌ Ошибка сохранения настроек:', error);
-        }
-    }
-    
-    // Инициализация Firebase
     async initFirebase() {
         try {
+            console.log('🔥 Инициализация Firebase...');
+            
+            if (typeof firebase === 'undefined') {
+                console.log('ℹ️ Firebase не загружен');
+                return;
+            }
+            
+            // Уже инициализирован в firebase-config.js
+            if (!firebase.apps.length) {
+                console.log('⚠️ Firebase не инициализирован');
+                return;
+            }
+            
+            console.log('✅ Firebase уже инициализирован');
+            
+            // Инициализируем FirebaseSync если доступен
             if (typeof FirebaseSync !== 'undefined') {
                 this.firebaseSync = new FirebaseSync(this);
                 const success = await this.firebaseSync.init();
                 
                 if (success) {
-                    console.log('✅ Firebase инициализирован');
+                    console.log('✅ FirebaseSync инициализирован');
                     
-                    // Включаем синхронизацию если настроено
-                    if (this.syncEnabled) {
-                        await this.syncWithFirebase();
-                    }
+                    // Синхронизируем данные
+                    setTimeout(() => {
+                        this.syncWithFirebase();
+                    }, 1000);
                 }
-            } else {
-                console.log('ℹ️ FirebaseSync не загружен');
             }
+            
         } catch (error) {
             console.error('❌ Ошибка инициализации Firebase:', error);
         }
     }
     
-    // Синхронизация с Firebase
     async syncWithFirebase() {
-        if (!this.firebaseSync || !this.syncEnabled) {
-            console.log('ℹ️ Синхронизация отключена');
+        if (!this.firebaseSync) {
+            console.log('ℹ️ FirebaseSync не доступен');
             return;
         }
         
@@ -228,21 +204,11 @@ class AppState {
             
             // Синхронизируем контрагентов
             if (this.firebaseSync.syncContractors) {
-                const result = await this.firebaseSync.syncContractors(this.contractors);
-                if (result && result.length > 0) {
-                    this.contractors = result;
+                const syncedContractors = await this.firebaseSync.syncContractors(this.contractors);
+                if (syncedContractors && syncedContractors.length > 0) {
+                    this.contractors = syncedContractors;
                     this.saveContractors();
-                    console.log(`✅ Контрагенты синхронизированы: ${result.length}`);
-                }
-            }
-            
-            // Синхронизируем отчеты
-            if (this.firebaseSync.syncReports) {
-                const reportsResult = await this.firebaseSync.syncReports(this.reports);
-                if (reportsResult && reportsResult.length > 0) {
-                    this.reports = reportsResult;
-                    this.saveReports();
-                    console.log(`✅ Отчеты синхронизированы: ${reportsResult.length}`);
+                    console.log(`✅ Контрагенты синхронизированы: ${this.contractors.length}`);
                 }
             }
             
@@ -254,25 +220,81 @@ class AppState {
         }
     }
     
-    // Переключение синхронизации
-    toggleSync() {
-        this.syncEnabled = !this.syncEnabled;
-        this.saveSettings();
-        
-        if (this.syncEnabled && this.firebaseSync) {
-            this.syncWithFirebase();
-        }
-        
-        return this.syncEnabled;
+    // ========== ОСНОВНЫЕ МЕТОДЫ ==========
+    
+    // Контрагенты
+    getAllContractors() {
+        return this.contractors;
     }
     
-    // Получение статуса синхронизации
+    saveContractors() {
+        try {
+            localStorage.setItem('honest_sign_contractors', JSON.stringify(this.contractors));
+            console.log(`✅ Сохранено ${this.contractors.length} контрагентов`);
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка сохранения контрагентов:', error);
+            return false;
+        }
+    }
+    
+    // Сессия
+    getCurrentSession() {
+        if (!this.currentSession) {
+            this.currentSession = this.createNewSession();
+        }
+        return this.currentSession;
+    }
+    
+    saveSession(session = null) {
+        try {
+            if (session) {
+                this.currentSession = session;
+            }
+            this.currentSession.updatedAt = new Date().toISOString();
+            localStorage.setItem('honest_sign_session', JSON.stringify(this.currentSession));
+            console.log('✅ Сессия сохранена');
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка сохранения сессии:', error);
+            return false;
+        }
+    }
+    
+    // Отчеты
+    getAllReports() {
+        return this.reports;
+    }
+    
+    saveReport(report) {
+        try {
+            this.reports.unshift(report);
+            if (this.reports.length > 50) {
+                this.reports = this.reports.slice(0, 50);
+            }
+            localStorage.setItem('honest_sign_reports', JSON.stringify(this.reports));
+            console.log(`✅ Отчет сохранен, всего: ${this.reports.length}`);
+            return true;
+        } catch (error) {
+            console.error('❌ Ошибка сохранения отчета:', error);
+            return false;
+        }
+    }
+    
+    clearReports() {
+        this.reports = [];
+        localStorage.removeItem('honest_sign_reports');
+        console.log('✅ Отчеты очищены');
+    }
+    
+    // Синхронизация
     getSyncStatus() {
         const lastSync = localStorage.getItem('honest_sign_last_sync');
+        const syncEnabled = localStorage.getItem('honest_sign_sync_enabled') !== 'false';
         
         return {
-            isConnected: this.firebaseSync ? this.firebaseSync.isConnected() : false,
-            syncEnabled: this.syncEnabled,
+            isConnected: this.firebaseSync ? this.firebaseSync.isConnected : false,
+            syncEnabled: syncEnabled,
             deviceId: this.deviceId,
             lastSync: lastSync,
             contractorsCount: this.contractors.length,
@@ -280,140 +302,64 @@ class AppState {
         };
     }
     
-    // Получение всех контрагентов
-    getAllContractors() {
-        return this.contractors;
-    }
-    
-    // Получение текущей сессии
-    getCurrentSession() {
-        return this.currentSession;
-    }
-    
-    // Получение всех отчетов
-    getAllReports() {
-        return this.reports;
-    }
-    
-    // Добавление контрагента
-    addContractor(name, category = 'Общая категория') {
-        const newId = this.contractors.length > 0 ? 
-            Math.max(...this.contractors.map(c => c.id)) + 1 : 1;
+    toggleSync() {
+        const current = localStorage.getItem('honest_sign_sync_enabled') !== 'false';
+        const newValue = !current;
+        localStorage.setItem('honest_sign_sync_enabled', newValue.toString());
         
-        const contractor = {
-            id: newId,
-            name: name,
-            category: category,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            deviceId: this.deviceId
-        };
-        
-        this.contractors.push(contractor);
-        this.saveContractors();
-        
-        // Синхронизируем если включено
-        if (this.syncEnabled && this.firebaseSync) {
-            this.firebaseSync.addContractor(contractor);
+        if (newValue && this.firebaseSync) {
+            this.syncWithFirebase();
         }
         
-        return contractor;
+        return newValue;
     }
     
-    // Удаление контрагента
-    deleteContractor(id) {
-        const index = this.contractors.findIndex(c => c.id === id);
-        if (index !== -1) {
-            this.contractors.splice(index, 1);
-            this.saveContractors();
-            
-            // Синхронизируем если включено
-            if (this.syncEnabled && this.firebaseSync) {
-                this.firebaseSync.deleteContractor(id);
-            }
-            
-            return true;
-        }
-        return false;
-    }
-    
-    // Добавление отчета
-    addReport(report) {
-        this.reports.unshift(report);
-        if (this.reports.length > 100) {
-            this.reports = this.reports.slice(0, 100);
-        }
-        this.saveReports();
-        
-        // Синхронизируем если включено
-        if (this.syncEnabled && this.firebaseSync) {
-            this.firebaseSync.addReport(report);
-        }
-        
-        return report;
-    }
-    
-    // Очистка отчетов
-    clearReports() {
-        this.reports = [];
-        this.saveReports();
-        
-        // Синхронизируем если включено
-        if (this.syncEnabled && this.firebaseSync) {
-            this.firebaseSync.clearReports();
-        }
-    }
-    
-    // Экспорт данных
+    // Экспорт/Импорт
     exportData() {
         const data = {
             contractors: this.contractors,
             reports: this.reports,
             currentSession: this.currentSession,
-            exportDate: new Date().toISOString(),
             deviceId: this.deviceId,
+            exportDate: new Date().toISOString(),
             version: '1.0'
         };
-        
         return JSON.stringify(data, null, 2);
     }
     
-    // Импорт данных
     importData(jsonData) {
         try {
             const data = JSON.parse(jsonData);
+            let imported = 0;
             
-            // Объединяем контрагентов
+            // Импортируем контрагентов
             if (data.contractors && Array.isArray(data.contractors)) {
-                this.mergeContractors(data.contractors);
-            }
-            
-            // Объединяем отчеты
-            if (data.reports && Array.isArray(data.reports)) {
-                this.mergeReports(data.reports);
+                data.contractors.forEach(contractor => {
+                    const exists = this.contractors.some(c => c.id === contractor.id);
+                    if (!exists) {
+                        this.contractors.push(contractor);
+                        imported++;
+                    }
+                });
             }
             
             // Сохраняем
             this.saveContractors();
-            this.saveReports();
             
-            console.log(`✅ Данные импортированы: ${this.contractors.length} контрагентов, ${this.reports.length} отчетов`);
-            
-            // Синхронизируем если включено
-            if (this.syncEnabled && this.firebaseSync) {
-                this.syncWithFirebase();
-            }
-            
-            return true;
+            showSuccess(`Импортировано ${imported} контрагентов`, 3000);
+            return imported > 0;
             
         } catch (error) {
-            console.error('❌ Ошибка импорта данных:', error);
+            console.error('❌ Ошибка импорта:', error);
+            showError('Ошибка импорта данных: ' + error.message);
             return false;
         }
     }
     
-    // Объединение контрагентов
+    // Объединение контрагентов (для синхронизации)
     mergeContractors(newContractors) {
+        console.log('🔄 Объединение контрагентов...');
+        
         const merged = [...this.contractors];
         
         newContractors.forEach(newContractor => {
@@ -453,5 +399,10 @@ class AppState {
     }
 }
 
-// Создаем глобальный экземпляр
-window.appState = new AppState();
+// Создаем экземпляр при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 Запуск инициализации AppState...');
+    if (!window.appState) {
+        new AppState();
+    }
+});
