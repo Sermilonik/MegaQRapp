@@ -235,15 +235,19 @@ class AppState {
     }
     
     async syncWithFirebase() {
-        if (!this.firebaseSync) {
-            console.log('ℹ️ FirebaseSync не доступен');
+        if (!this.firebaseSync || !this.firebaseSync.isConnected) {
+            console.log('ℹ️ Firebase не подключен');
             return;
         }
         
         try {
             console.log('🔄 Синхронизация с Firebase...');
             
-            // Синхронизируем контрагентов
+            // Получаем статус
+            const status = this.firebaseSync.getStatus();
+            console.log('📊 Статус синхронизации:', status);
+            
+            // 1. Синхронизируем контрагентов
             if (this.firebaseSync.syncContractors) {
                 const syncedContractors = await this.firebaseSync.syncContractors(this.contractors);
                 if (syncedContractors && syncedContractors.length > 0) {
@@ -253,8 +257,20 @@ class AppState {
                 }
             }
             
-            // Обновляем время последней синхронизации
-            localStorage.setItem('honest_sign_last_sync', new Date().toISOString());
+            // 2. Синхронизируем отчеты
+            if (this.firebaseSync.syncReports) {
+                const syncedReports = await this.firebaseSync.syncReports(this.reports);
+                if (syncedReports && syncedReports.length > 0) {
+                    this.reports = syncedReports;
+                    this.saveReports();
+                    console.log(`✅ Отчеты синхронизированы: ${this.reports.length}`);
+                }
+            }
+            
+            // 3. Обновляем UI
+            this.notifyUIUpdate();
+            
+            console.log('✅ Синхронизация с Firebase завершена');
             
         } catch (error) {
             console.error('❌ Ошибка синхронизации:', error);
