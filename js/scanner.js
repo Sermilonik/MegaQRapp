@@ -912,6 +912,7 @@ class ScannerManager {
         try {
             if (!window.appState) {
                 console.log('ℹ️ AppState не доступен для обновления UI синхронизации');
+                this.updateSyncUIFallback();
                 return;
             }
             
@@ -922,7 +923,8 @@ class ScannerManager {
             const elements = {
                 syncStatus: document.getElementById('syncStatus'),
                 deviceId: document.getElementById('deviceId'),
-                lastSync: document.getElementById('lastSync')
+                lastSync: document.getElementById('lastSync'),
+                firebaseStatus: document.getElementById('firebaseStatus')
             };
             
             // Статус синхронизации
@@ -951,32 +953,65 @@ class ScannerManager {
                 if (lastSync) {
                     const date = new Date(lastSync);
                     elements.lastSync.textContent = 
-                        date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                        date.toLocaleDateString() + ' ' + date.toLocaleTimeString().substring(0, 5);
                 } else {
                     elements.lastSync.textContent = 'никогда';
                 }
             }
             
+            // Статус Firebase
+            if (elements.firebaseStatus) {
+                if (status.isConnected) {
+                    elements.firebaseStatus.textContent = '✅ Подключено';
+                    elements.firebaseStatus.style.color = '#28a745';
+                } else {
+                    elements.firebaseStatus.textContent = '❌ Ошибка';
+                    elements.firebaseStatus.style.color = '#dc3545';
+                }
+            }
+            
+            console.log('🔄 UI синхронизации обновлен:', {
+                connected: status.isConnected,
+                lastSync: lastSync
+            });
+            
         } catch (error) {
             console.error('❌ Ошибка обновления UI синхронизации:', error);
+            this.updateSyncUIFallback();
         }
     }
 
     async forceSync() {
+        console.log('🔄 Принудительная синхронизация...');
+        
         if (!window.appState) {
             showError('AppState не доступен');
             return;
         }
         
-        showInfo('🔄 Принудительная синхронизация...', 3000);
+        if (!window.appState.firebaseSync) {
+            showError('Firebase синхронизация не инициализирована');
+            return;
+        }
+        
+        showInfo('🔄 Синхронизация с облаком...', 3000);
         
         try {
-            await window.appState.syncWithFirebase();
-            this.updateSyncUI();
-            showSuccess('✅ Синхронизация завершена', 3000);
+            // Используем метод forceSync из FirebaseSync
+            const success = await window.appState.firebaseSync.forceSync();
+            
+            if (success) {
+                // Перезагружаем данные в UI
+                this.loadContractors();
+                this.loadReportsList();
+                this.updateSyncUI();
+            } else {
+                showWarning('Синхронизация не выполнена', 3000);
+            }
+            
         } catch (error) {
             console.error('❌ Ошибка синхронизации:', error);
-            showError('Ошибка синхронизации: ' + error.message);
+            showError('Ошибка: ' + error.message);
         }
     }
 
@@ -1526,6 +1561,7 @@ class ScannerManager {
         this.setupButton('exportDataBtn', 'exportData');
         this.setupButton('importDataBtn', 'importData');
         this.setupButton('forceSyncBtn', 'forceSync');
+        this.setupButton('testSyncBtn', 'testSyncConnection');
     
         // Тестовые коды
         document.addEventListener('click', (e) => {
@@ -1565,6 +1601,31 @@ class ScannerManager {
                 e.preventDefault();
                 this[methodName]();
             });
+        }
+    }
+
+    async testSyncConnection() {
+        console.log('🧪 Тест подключения синхронизации...');
+        
+        if (!window.appState) {
+            showError('AppState не доступен');
+            return;
+        }
+        
+        showInfo('🧪 Тестирование подключения...', 3000);
+        
+        try {
+            const success = await window.appState.testFirebaseSync();
+            
+            if (success) {
+                showSuccess('✅ Синхронизация работает!', 3000);
+            } else {
+                showError('❌ Проблемы с синхронизацией', 3000);
+            }
+            
+        } catch (error) {
+            console.error('❌ Ошибка теста синхронизации:', error);
+            showError('Ошибка теста: ' + error.message);
         }
     }
 
